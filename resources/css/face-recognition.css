@@ -1,0 +1,51 @@
+/* Face Recognition Styles */
+.face-recognition-container {
+    position: relative;
+    margin: 0 auto;
+    max-width: 300px;
+}
+
+.face-recognition-video,
+.face-recognition-canvas {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    background-color: #f8f9fa;
+}
+
+.face-recognition-instructions {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+.face-recognition-buttons {
+    margin-top: 15px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.face-landmark-point {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background-color: #4e73df;
+    border-radius: 50%;
+    transform: translate(-2px, -2px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 576px) {
+    .face-recognition-container {
+        width: 100%;
+    }
+    
+    .face-recognition-buttons {
+        flex-direction: column;
+    }
+    
+    .face-recognition-buttons .btn {
+        width: 100%;
+    }
+}

@@ -1,0 +1,105 @@
+body {
+    overflow-x: hidden; /* Mencegah scroll horizontal utama jika ada konten melebihi lebar */
+}
+
+#wrapper {
+    display: flex;
+    /* Hapus toggled class logic dari sini jika sidebar selalu fixed di desktop */
+}
+
+#sidebar-wrapper {
+    min-height: 100vh; /* Tinggi penuh viewport */
+    width: 250px; /* Lebar sidebar yang Anda tentukan */
+    position: fixed; /* KUNCI: Membuat sidebar tetap pada posisinya */
+    top: 0;
+    left: 0;
+    z-index: 1000; /* Pastikan di atas konten lain jika ada overlap */
+    background-color: #212529; /* Warna bg-dark Bootstrap, sesuaikan jika berbeda */
+    transition: margin-left .25s ease-out; /* Untuk animasi toggle jika masih digunakan */
+    overflow-y: auto; /* Tambahkan scroll jika konten sidebar lebih panjang dari tinggi layar */
+}
+
+#sidebar-wrapper .sidebar-heading {
+    padding: 0.875rem 1.25rem;
+    font-size: 1.2rem;
+}
+
+#sidebar-wrapper .list-group {
+    width: 100%; /* Sesuaikan agar mengisi lebar sidebar */
+}
+
+#page-content-wrapper {
+    flex-grow: 1; /* Mengisi sisa ruang */
+    padding-top: 56px; /* Sesuaikan dengan tinggi navbar Anda jika navbar fixed */
+    margin-left: 250px; /* KUNCI: Beri ruang untuk sidebar yang fixed */
+    transition: margin-left .25s ease-out; /* Untuk animasi toggle */
+    min-width: 0; /* Untuk mencegah overflow pada flex item */
+    overflow-y: auto; /* Konten utama bisa di-scroll */
+    /* Anda mungkin perlu mengatur height atau min-height di sini jika kontennya pendek */
+    /* Contoh: min-height: calc(100vh - 56px); (jika navbar 56px) */
+}
+
+/* Styling untuk navbar di dalam page-content-wrapper */
+#page-content-wrapper .navbar {
+    position: fixed; /* Membuat navbar tetap di atas saat konten di-scroll */
+    top: 0;
+    right: 0; /* Mengisi dari kanan */
+    left: 250px; /* Mulai setelah sidebar */
+    z-index: 999; /* Di bawah sidebar tapi di atas konten */
+    transition: left .25s ease-out; /* Untuk animasi toggle */
+}
+
+
+/* Toggled state (jika Anda masih ingin bisa menyembunyikan sidebar) */
+#wrapper.toggled #sidebar-wrapper {
+    margin-left: -250px; /* Sembunyikan sidebar ke kiri */
+}
+
+#wrapper.toggled #page-content-wrapper {
+    margin-left: 0; /* Konten mengisi penuh saat sidebar tersembunyi */
+}
+
+#wrapper.toggled #page-content-wrapper .navbar {
+    left: 0; /* Navbar mengisi penuh saat sidebar tersembunyi */
+}
+
+
+/* Penyesuaian untuk layar kecil jika sidebar disembunyikan secara default */
+@media (max-width: 768px) {
+    #sidebar-wrapper {
+        margin-left: -250px; /* Sidebar tersembunyi secara default di mobile */
+    }
+    #page-content-wrapper {
+        margin-left: 0; /* Konten mengisi penuh */
+    }
+    #page-content-wrapper .navbar {
+        left: 0; /* Navbar mengisi penuh */
+    }
+
+    #wrapper.toggled #sidebar-wrapper {
+        margin-left: 0; /* Tampilkan sidebar saat ditoggle di mobile */
+    }
+
+    /* Jika sidebar tampil di mobile, konten utama dan navbar perlu digeser */
+    #wrapper.toggled #page-content-wrapper {
+        /* Anda bisa memilih untuk tidak menggeser konten utama di mobile,
+           atau menggesernya sebagian, atau membiarkan sidebar overlay.
+           Jika ingin menggeser: */
+        margin-left: 250px;
+    }
+     #wrapper.toggled #page-content-wrapper .navbar {
+        left: 250px;
+    }
+}
+
+
+.list-group-item.active {
+    z-index: 2;
+    color: #fff;
+    background-color: #0d6efd; /* Bootstrap primary color */
+    border-color: #0d6efd;
+}
+.list-group-item-dark.list-group-item-action:hover, .list-group-item-dark.list-group-item-action:focus {
+     color: #fff;
+     background-color: #5a5c69; /* Warna hover yang lebih gelap */
+ }

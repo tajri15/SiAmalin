@@ -1,0 +1,149 @@
+@extends('admin.layouts.app') {{-- Menggunakan layout admin --}}
+
+@section('title', 'Rekapitulasi Presensi - Fakultas ' . $fakultasKomandan)
+
+@push('styles')
+<style>
+    .table-sm th, .table-sm td {
+        font-size: 0.85rem;
+        padding: 0.4rem;
+        vertical-align: middle;
+    }
+    .img-thumbnail-xs {
+        width: 40px;
+        height: 40px;
+        object-fit: cover;
+        border-radius: 0.25rem;
+    }
+    .form-select-sm, .form-control-sm {
+        font-size: 0.875rem;
+    }
+</style>
+@endpush
+
+@section('content')
+<div class="container-fluid">
+    <h1 class="h3 mb-2 text-gray-800">Rekapitulasi Presensi Petugas</h1>
+    <p class="mb-4">Menampilkan data presensi petugas keamanan di {{ $fakultasKomandan }}.</p>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Filter Data Presensi</h6>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ route('komandan.presensi.rekapitulasi') }}">
+                <div class="row gx-2 gy-2 align-items-end">
+                    <div class="col-md-3">
+                        <label for="bulan" class="form-label mb-1 small">Bulan:</label>
+                        <select name="bulan" id="bulan" class="form-select form-select-sm">
+                            @for ($b = 1; $b <= 12; $b++)
+                                <option value="{{ str_pad($b, 2, '0', STR_PAD_LEFT) }}" {{ $bulanIni == str_pad($b, 2, '0', STR_PAD_LEFT) ? 'selected' : '' }}>
+                                    {{ $namaBulan[$b] }}
+                                </option>
+                            @endfor
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="tahun" class="form-label mb-1 small">Tahun:</label>
+                        <select name="tahun" id="tahun" class="form-select form-select-sm">
+                            @for ($t = date('Y'); $t >= date('Y') - 5; $t--)
+                                <option value="{{ $t }}" {{ $tahunIni == $t ? 'selected' : '' }}>{{ $t }}</option>
+                            @endfor
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="nik" class="form-label mb-1 small">NIK Petugas:</label>
+                        <input type="text" name="nik" id="nik" class="form-control form-control-sm" value="{{ $searchNik ?? '' }}" placeholder="Masukkan NIK">
+                    </div>
+                     <div class="col-md-3">
+                        <label for="nama" class="form-label mb-1 small">Nama Petugas:</label>
+                        <input type="text" name="nama" id="nama" class="form-control form-control-sm" value="{{ $searchNama ?? '' }}" placeholder="Masukkan Nama">
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary btn-sm w-100" title="Filter"><i class="bi bi-funnel-fill"></i></button>
+                    </div>
+                </div>
+                 <div class="mt-3">
+                    <a href="{{ route('komandan.presensi.harian', ['tanggal' => date('Y-m-d')]) }}" class="btn btn-info btn-sm">
+                        <i class="bi bi-calendar-day"></i> Laporan Harian Ini
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Data Presensi ({{ $namaBulan[(int)$bulanIni] }} {{ $tahunIni }}) - Fakultas {{ $fakultasKomandan }}</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover table-sm" id="dataTablePresensiKomandan" width="100%" cellspacing="0">
+                    <thead>
+                        <tr class="text-center">
+                            <th>No</th>
+                            <th>Tanggal</th>
+                            <th>NIK</th>
+                            <th>Nama Petugas</th>
+                            <th>Jam Masuk</th>
+                            <th>Foto Masuk</th>
+                            <th>Jam Pulang</th>
+                            <th>Foto Pulang</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($presensiData as $index => $data)
+                        <tr> 
+                            <td class="text-center">{{ $presensiData->firstItem() + $index }}</td>
+                            <td>{{ \Carbon\Carbon::parse($data->tgl_presensi)->isoFormat('dddd, D MMM YY') }}</td>
+                            <td>{{ $data->nik }}</td>
+                            <td>
+                                @if($data->karyawan)
+                                <a href="{{ route('komandan.presensi.detail_karyawan', $data->karyawan->nik) }}?bulan={{$bulanIni}}&tahun={{$tahunIni}}">
+                                    {{ $data->karyawan->nama_lengkap }}
+                                </a>
+                                @else
+                                    {{ 'N/A' }}
+                                @endif
+                            </td>
+                            <td class="text-center">{{ $data->jam_in ?? '-' }}</td>
+                            <td class="text-center">
+                                @if($data->foto_in)
+                                <a href="{{ asset('storage/' . $data->foto_in) }}" data-bs-toggle="tooltip" title="Lihat Foto Masuk" target="_blank">
+                                    <img src="{{ asset('storage/' . $data->foto_in) }}" alt="Masuk" class="img-thumbnail-xs">
+                                </a>
+                                @else - @endif
+                            </td>
+                            <td class="text-center">{{ $data->jam_out ?? '-' }}</td>
+                            <td class="text-center">
+                                @if($data->foto_out)
+                                <a href="{{ asset('storage/' . $data->foto_out) }}" data-bs-toggle="tooltip" title="Lihat Foto Pulang" target="_blank">
+                                    <img src="{{ asset('storage/' . $data->foto_out) }}" alt="Pulang" class="img-thumbnail-xs">
+                                </a>
+                                @else - @endif
+                            </td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="8" class="text-center">Tidak ada data presensi untuk periode dan filter ini.</td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-3 d-flex justify-content-center">
+                {{ $presensiData->appends(request()->query())->links() }}
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+</script>
+@endpush
