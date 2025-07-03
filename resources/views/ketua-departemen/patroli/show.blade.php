@@ -67,28 +67,65 @@
 </div>
 @endsection
 
-@push('scripts') {{-- This was missing --}}
+@push('scripts')
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const pathData = @json($pathForMap ?? []);
+        const mapElement = document.getElementById('mapDetailPatroli');
+        
         if (pathData && pathData.length > 0) {
             const centerLat = pathData[Math.floor(pathData.length / 2)][0];
             const centerLng = pathData[Math.floor(pathData.length / 2)][1];
+            
+            // Inisialisasi peta dengan ID yang benar
             const map = L.map('mapDetailPatroli').setView([centerLat, centerLng], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            const polyline = L.polyline(pathData, { color: '#007bff', weight: 5 }).addTo(map);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Tambahkan polyline untuk jejak patroli
+            const polyline = L.polyline(pathData, { 
+                color: '#007bff', 
+                weight: 5 
+            }).addTo(map);
+
+            // Marker titik awal (hijau)
             if (pathData.length > 0) {
-                L.marker(pathData[0], {icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]})}).addTo(map).bindPopup('Mulai Patroli');
+                L.marker(pathData[0], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).addTo(map).bindPopup('Mulai Patroli');
             }
+
+            // Marker titik akhir (merah)
             if (pathData.length > 1) {
-                L.marker(pathData[pathData.length - 1], {icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]})}).addTo(map).bindPopup('Selesai Patroli');
+                L.marker(pathData[pathData.length - 1], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).addTo(map).bindPopup('Selesai Patroli');
             }
+
+            // Fit bounds jika polyline valid
             if (polyline.getBounds().isValid()) {
                 map.fitBounds(polyline.getBounds().pad(0.1));
             }
         } else {
-            document.getElementById('mapDetailPatroli').innerHTML = '<p class="text-center text-muted p-5">Tidak ada data jejak.</p>';
+            // Tampilkan pesan jika tidak ada data
+            mapElement.innerHTML = '<p class="text-center text-muted p-5">Tidak ada data jejak patroli yang tersedia.</p>';
         }
     });
 </script>

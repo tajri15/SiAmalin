@@ -218,38 +218,85 @@
 @push('myscript')
 <script>
     $(document).ready(function() {
-        function goBackOrFallback() {
-            if (document.referrer && 
-                !document.referrer.includes(window.location.hostname) && 
-                new URL(document.referrer).pathname !== window.location.pathname) {
-                window.history.back();
-            } else {
-                window.location.href = "{{ route('dashboard') }}";
-            }
-            return false;
+        // Tracking halaman sebelumnya
+        let previousPage = sessionStorage.getItem('previousPage');
+        const currentPage = window.location.href;
+        
+        // Simpan halaman saat ini sebagai referensi
+        if (!previousPage || previousPage === currentPage) {
+            sessionStorage.setItem('previousPage', document.referrer || '/dashboard');
         }
 
-        // Alternatif lebih sederhana
+        // Fungsi handle back button dengan kontrol lebih ketat
         $(document).on('click', '.goBack', function(e) {
             e.preventDefault();
-            window.history.back();
             
-            setTimeout(function() {
-                if (window.location.href === e.target.href) {
-                    window.location.href = "{{ route('dashboard') }}";
-                }
-            }, 500);
+            // 1. Coba kembali ke halaman spesifik yang kita track
+            const trackedPrevious = sessionStorage.getItem('previousPage');
+            if (trackedPrevious && 
+                trackedPrevious !== currentPage &&
+                trackedPrevious.includes(window.location.hostname) &&
+                !trackedPrevious.includes('laporan/create')) {
+                window.location.href = trackedPrevious;
+                return;
+            }
+            
+            // 2. Coba history.back() dengan timeout kontrol
+            if (window.history.length > 1) {
+                const currentState = window.history.state;
+                window.history.back();
+                
+                // Jika tidak berpindah setelah 300ms, gunakan fallback
+                setTimeout(() => {
+                    if (window.history.state === currentState) {
+                        proceedToFallback();
+                    }
+                }, 300);
+                return;
+            }
+            
+            // 3. Fallback ke halaman yang aman
+            proceedToFallback();
         });
 
-        // Inisialisasi modal
+        function proceedToFallback() {
+            // Cek referrer yang valid
+            const validReferrer = document.referrer && 
+                                document.referrer.includes(window.location.hostname) &&
+                                !document.referrer.includes('laporan/create') &&
+                                document.referrer !== currentPage;
+            
+            if (validReferrer) {
+                window.location.href = document.referrer;
+                return;
+            }
+            
+            // Cek apakah ada halaman sebelumnya di sessionStorage
+            const lastValidPage = sessionStorage.getItem('lastValidPage') || '/dashboard';
+            if (lastValidPage !== currentPage) {
+                window.location.href = lastValidPage;
+                return;
+            }
+            
+            // Ultimate fallback
+            window.location.href = '/dashboard';
+        }
+
+        // Simpan halaman valid terakhir
+        $(window).on('beforeunload', function() {
+            // Hanya simpan jika bukan halaman create laporan
+            if (!window.location.href.includes('laporan/create')) {
+                sessionStorage.setItem('lastValidPage', window.location.href);
+            }
+        });
+
+        // Inisialisasi modal dan lainnya
         var detailModal = new bootstrap.Modal(document.getElementById('detailLaporanModal'));
         
-        // Fungsi untuk menutup modal
         function closeDetailModal() {
             detailModal.hide();
         }
         
-        // Event listener untuk tombol close dengan ikon x
         $(document).on('click', '.close-modal-btn', function(e) {
             e.preventDefault();
             closeDetailModal();
@@ -259,7 +306,6 @@
         $(document).on('click', '.show-laporan-detail', function(e) {
             e.preventDefault();
             
-            // Ambil data dari atribut data-*
             const jenisLaporan = $(this).data('jenis-laporan');
             const tanggalJam = $(this).data('tanggal-jam');
             const lokasi = $(this).data('lokasi');

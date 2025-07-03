@@ -264,20 +264,19 @@ class PatroliController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function historiPatroli()
+    public function historiPatroli(Request $request) // KOREKSI 2: Tambahkan Request $request
     {
+        // KOREKSI 3: Hapus paksa pesan error lama dari sesi
+        // Ini memastikan halaman histori selalu bersih dari flash message sebelumnya.
+        $request->session()->forget('error');
+
         $karyawan = Auth::guard('karyawan')->user();
         $patrols = Patrol::where('karyawan_nik', $karyawan->nik)
                          ->where('status', 'selesai') 
                          ->orderBy('start_time', 'desc')
                          ->paginate(10); 
 
-        // Tambahkan header no-cache
-        return response()
-            ->view('patroli.histori', compact('patrols', 'karyawan'))
-            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
-            ->header('Pragma', 'no-cache')
-            ->header('Expires', 'Sat, 01 Jan 2000 00:00:00 GMT');
+        return view('patroli.histori', compact('patrols', 'karyawan'));
     }
 
     /**
@@ -294,17 +293,16 @@ class PatroliController extends Controller
                         ->first();
 
         if (!$patrol) {
-            // Ini adalah tempat di mana flash message error diset
+            // Tempat di mana flash message error diset
             return redirect()->route('patroli.histori')->with('error', 'Data patroli tidak ditemukan.');
         }
         
         $pathForMap = collect($patrol->path)->map(function ($point) {
-            // Pastikan $point adalah array dan memiliki setidaknya 2 elemen
             if (is_array($point) && count($point) >= 2) {
                 return [$point[1], $point[0]]; // Balik urutan menjadi [lat, lng]
             }
-            return null; // atau handle error/skip jika format tidak sesuai
-        })->filter()->toArray(); // filter() untuk menghapus nilai null
+            return null;
+        })->filter()->toArray();
 
 
         return view('patroli.detail', compact('patrol', 'karyawan', 'pathForMap'));

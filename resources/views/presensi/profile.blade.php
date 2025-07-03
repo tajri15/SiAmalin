@@ -52,14 +52,31 @@
 
 @push('myscript')
 <script>
-    // Fallback jika history.back tidak bekerja
-    $(document).on('click', '.goBack', function(e) {
-        e.preventDefault();
-        if (window.history.length > 1) {
-            window.history.back();
-        } else {
-            window.location.href = '/dashboard'; // Fallback ke dashboard
-        }
+    $(document).ready(function() {
+        // Fungsi back yang lebih reliable
+        $(document).on('click', '.goBack', function(e) {
+            e.preventDefault();
+            
+            // Cek apakah ada history sebelumnya dalam session yang sama
+            if (performance.navigation.type === performance.navigation.TYPE_NAVIGATE) {
+                // Jika pengguna datang dari navigasi dalam aplikasi
+                if (window.history.length > 1) {
+                    window.history.back();
+                    return;
+                }
+            }
+            
+            // Fallback: Coba cek referrer
+            if (document.referrer && 
+                document.referrer.indexOf(window.location.hostname) !== -1 &&
+                !document.referrer.includes('dashboard')) {
+                window.location = document.referrer;
+                return;
+            }
+            
+            // Ultimate fallback ke dashboard
+            window.location.href = '/dashboard';
+        });
     });
 </script>
 @endpush

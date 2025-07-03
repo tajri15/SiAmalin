@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title') - SiAmalin Panel</title>
+    <link rel="icon" type="image/png" href="{{ asset('assets/img/favicon.png') }}?v=3">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('assets/img/icon/192x192.png') }}?v=3">
+    <link rel="shortcut icon" href="{{ asset('assets/img/favicon.ico') }}?v=3" type="image/x-icon">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     @stack('styles')
