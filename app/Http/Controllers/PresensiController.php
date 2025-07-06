@@ -1,4 +1,5 @@
 <?php
+// File: C:\Users\dafii\OneDrive\Desktop\SiAmalin-EROR\SiAmalin\app\Http\Controllers\PresensiController.php
 
 namespace App\Http\Controllers;
 
@@ -9,12 +10,11 @@ use Illuminate\Support\Facades\Log;
 use App\Models\Presensi;
 use App\Models\Karyawan;
 use App\Models\JadwalShift;
-use App\Models\Laporan;
 use MongoDB\BSON\UTCDateTime;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 use App\Helpers\FaceRecognitionHelper;
-use App\Services\FaceRecognitionService;
+use App\Services\FaceRecognitionService; // Pastikan ini di-import
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Hash;
 
@@ -22,6 +22,7 @@ class PresensiController extends Controller
 {
     protected $faceRecognitionService;
 
+    // PERUBAHAN: Tambahkan constructor untuk dependency injection
     public function __construct(FaceRecognitionService $faceRecognitionService)
     {
         $this->faceRecognitionService = $faceRecognitionService;
@@ -60,10 +61,12 @@ class PresensiController extends Controller
 
     public function store(Request $request)
     {
+        // PERUBAHAN: Validasi untuk menerima face_descriptor
         $validator = Validator::make($request->all(), [
             'lokasi' => 'required|string',
             'image' => 'required|string',
             'nik' => 'required|string|exists:karyawans,nik',
+            'face_descriptor' => 'sometimes|required|array', // 'sometimes' agar tidak error jika jabatan bukan petugas
         ]);
 
         if ($validator->fails()) {
@@ -76,9 +79,18 @@ class PresensiController extends Controller
             if (empty($user->face_embedding)) {
                 return response()->json(['error' => 'Data wajah Anda belum terdaftar.'], 403);
             }
-            $faceVerification = $this->faceRecognitionService->verifyFace($request->image, $user->nik);
+
+            // PERUBAHAN: Menggunakan service yang sudah diperbarui
+            $faceVerification = $this->faceRecognitionService->verifyFaceDescriptor(
+                $request->face_descriptor,
+                $user->nik
+            );
+
             if (!$faceVerification['success'] || !$faceVerification['match']) {
-                return response()->json(['error' => "Verifikasi wajah gagal. Kemiripan rendah."], 401);
+                $errorMessage = "Verifikasi wajah gagal. " . ($faceVerification['message'] ?? '');
+                // Memberi info tambahan tentang jarak untuk debugging
+                $errorMessage .= " (Jarak: " . round($faceVerification['distance'], 2) . ", Maks: " . $faceVerification['threshold'] . ")";
+                return response()->json(['error' => $errorMessage], 401);
             }
             
             if (empty($user->office_location)) {
@@ -115,7 +127,6 @@ class PresensiController extends Controller
         $actionType = $isClockOut ? "out" : "in";
         Log::info("Aksi presensi terdeteksi: {$actionType} untuk NIK {$user->nik}");
 
-        // PERBAIKAN DI SINI: Menghapus "public/" dari path
         $folderPath = "uploads/absensi/";
         $fileName = "{$user->nik}-{$hariini->format('Y-m-d')}-{$actionType}.png";
         $fullPath = $folderPath . $fileName;
@@ -125,11 +136,10 @@ class PresensiController extends Controller
         $image_base64 = base64_decode($image_parts[1]);
         
         try {
-            // Menggunakan Storage::disk('public') yang sudah mengarah ke storage/app/public
             $success = Storage::disk('public')->put($fullPath, $image_base64);
             if (!$success) throw new \Exception("Gagal menyimpan file gambar.");
             
-            $savedPath = $fullPath; // Path yang disimpan di DB adalah path relatif di dalam disk
+            $savedPath = $fullPath;
 
             if ($isClockOut) {
                 Log::info("Melakukan update presensi pulang untuk NIK: {$user->nik}");

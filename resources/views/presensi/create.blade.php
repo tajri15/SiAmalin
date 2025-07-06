@@ -510,28 +510,40 @@
                     showError("Wajah tidak terdeteksi");
                     return;
                 }
-                
+
                 if (distance > maxRadius) {
                     showError(`Anda berada ${distance.toFixed(0)} meter dari kantor (max ${maxRadius}m)`);
                     return;
                 }
-                
+
                 try {
                     verifyBtn.disabled = true;
                     verifyBtn.classList.add('loading');
-                    verifyText.textContent = "Memverifikasi...";
-                    
+                    verifyText.textContent = "Memproses...";
+
+                    // 1. Ambil gambar dari video
+                    const canvas = document.createElement('canvas');
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    
-                    const imageData = canvas.toDataURL('image/jpeg');
+                    const imageDataUrl = canvas.toDataURL('image/jpeg'); // untuk disimpan sbg bukti foto
+
+                    // 2. Hasilkan Face Descriptor menggunakan face-api.js
+                    const detectionWithDescriptor = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                        .withFaceLandmarks()
+                        .withFaceDescriptor();
+
+                    if (!detectionWithDescriptor) {
+                        throw new Error("Gagal menghasilkan deskriptor wajah. Coba lagi.");
+                    }
+
+                    const faceDescriptor = Array.from(detectionWithDescriptor.descriptor); // Konversi ke array
+
+                    // 3. Kirim data ke server (termasuk deskriptor)
                     const lokasi = lokasiInput.value;
-                    const nik = document.getElementById('nik').value; // Ambil dari input hidden
-                    
-                    console.log('Data yang dikirim:', { nik, lokasi, image: imageData.substring(0, 50) + '...' });
-                    
+                    const nik = document.getElementById('nik').value;
+
                     const response = await fetch("{{ route('presensi.store') }}", {
                         method: 'POST',
                         headers: {
@@ -540,35 +552,32 @@
                             'Accept': 'application/json'
                         },
                         body: JSON.stringify({
-                            image: imageData,
+                            image: imageDataUrl, // Kirim foto sebagai bukti
                             lokasi: lokasi,
-                            nik: nik
+                            nik: nik,
+                            face_descriptor: faceDescriptor // KIRIM DESKRIPTOR WAJAH
                         })
                     });
-                    
+
                     const data = await response.json();
-                    
+
                     if (!response.ok) {
-                        let errorMsg = data.error || "Verifikasi gagal";
-                        if (data.errors && data.errors.nik) {
-                            errorMsg = data.errors.nik[0];
-                        }
-                        throw new Error(errorMsg);
+                        throw new Error(data.error || "Verifikasi gagal");
                     }
-                    
+
                     successMessage.textContent = data.success;
                     successModal.classList.add('active');
-                    
+
                     modalCloseBtn.addEventListener('click', function() {
                         successModal.classList.remove('active');
                         redirectAfterSuccess(data.redirect_url);
                     });
-                    
+
                     setTimeout(() => {
                         successModal.classList.remove('active');
                         redirectAfterSuccess(data.redirect_url);
                     }, 3000);
-                    
+
                 } catch (error) {
                     console.error("Verification error:", error);
                     showError(error.message);
