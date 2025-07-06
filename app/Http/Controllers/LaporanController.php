@@ -53,50 +53,66 @@ class LaporanController extends Controller
 
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        // Ambil semua data dari request
+        $data = $request->all();
+
+        // --- PERBAIKAN: Ubah string JSON face_descriptor menjadi array PHP sebelum validasi ---
+        if (isset($data['face_descriptor']) && is_string($data['face_descriptor'])) {
+            $decodedDescriptor = json_decode($data['face_descriptor'], true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $data['face_descriptor'] = $decodedDescriptor;
+            } else {
+                // Jika decode gagal, set ke null agar validasi gagal dengan benar
+                $data['face_descriptor'] = null; 
+            }
+        }
+
+        // Validasi data yang sudah dimodifikasi
+        $validator = Validator::make($data, [
             'tgl_laporan' => 'required|date',
             'jam' => 'required|date_format:H:i',
             'jenis_laporan' => 'required|in:harian,kegiatan,masalah',
             'keterangan' => 'required|string|max:2000',
             'lokasi' => 'required|string|max:255',
-            'foto' => 'required|string', 
+            'foto' => 'required|string',
             'face_image' => 'required|string',
-            'nik' => 'required|string|exists:karyawans,nik'
+            'nik' => 'required|string|exists:karyawans,nik',
+            'face_descriptor' => 'required|array' // Aturan ini sekarang akan berhasil
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Validasi gagal',
+                'message' => 'Validasi gagal, periksa kembali data yang Anda masukkan.',
                 'errors' => $validator->errors()
             ], 422);
         }
 
-        // Pastikan NIK yang dikirim sama dengan NIK user yang login
-        if (Auth::guard('karyawan')->user()->nik !== $request->nik) {
+        $validatedData = $validator->validated();
+
+        if (Auth::guard('karyawan')->user()->nik !== $validatedData['nik']) {
              return response()->json([
                 'success' => false,
                 'message' => 'Aksi tidak diizinkan. NIK tidak sesuai.'
             ], 403);
         }
         
-        // Ambil user yang sedang login (sudah diautentikasi)
         $user = Auth::guard('karyawan')->user();
 
-
         try {
-            $faceVerification = $this->faceRecognitionService->verifyFace(
-                $request->face_image,
-                $request->nik
+            $faceVerification = $this->faceRecognitionService->verifyFaceDescriptor(
+                $validatedData['face_descriptor'],
+                $validatedData['nik']
             );
 
             if (!$faceVerification['success'] || !$faceVerification['match']) {
+                $distanceMsg = isset($faceVerification['distance']) ? "Jarak: " . round($faceVerification['distance'], 4) : "";
+                $thresholdMsg = isset($faceVerification['threshold']) ? "(Batas: " . $faceVerification['threshold'] . ")" : "";
+                
                 return response()->json([
                     'success' => false,
-                    'message' => "Verifikasi wajah gagal. Kemiripan: " .
-                                 round(($faceVerification['similarity'] ?? 0) * 100, 2) . "% (Minimum " .
-                                 round(($faceVerification['threshold'] ?? config('face_recognition.threshold')) * 100, 2) . "%)",
-                    'similarity' => $faceVerification['similarity'] ?? 0
+                    'message' => "Verifikasi wajah gagal. {$distanceMsg} {$thresholdMsg}",
+                    'distance' => $faceVerification['distance'] ?? 99
                 ], 401);
             }
 
@@ -104,24 +120,24 @@ class LaporanController extends Controller
             $yearMonth = $currentDate->format('Y/m');
             
             $fotoPath = $this->processBase64Image(
-                $request->foto,
+                $validatedData['foto'],
                 "laporans/{$yearMonth}/evidence",
-                'evidence_' . $request->nik . '_' . time()
+                'evidence_' . $validatedData['nik'] . '_' . time()
             );
             
             $faceImagePath = $this->processBase64Image(
-                $request->face_image, // Ini adalah face_image dari verifikasi, bukan foto bukti
+                $validatedData['face_image'],
                 "laporans/{$yearMonth}/verification",
-                'faceverify_' . $request->nik . '_' . time()
+                'faceverify_' . $validatedData['nik'] . '_' . time()
             );
 
             $laporan = new Laporan([
-                'nik' => $request->nik,
-                'tanggal' => new UTCDateTime(Carbon::parse($request->tgl_laporan)->timestamp * 1000),
-                'jam' => $request->jam,
-                'jenis_laporan' => $request->jenis_laporan,
-                'keterangan' => $request->keterangan,
-                'lokasi' => $request->lokasi,
+                'nik' => $validatedData['nik'],
+                'tanggal' => new UTCDateTime(Carbon::parse($validatedData['tgl_laporan'])->timestamp * 1000),
+                'jam' => $validatedData['jam'],
+                'jenis_laporan' => $validatedData['jenis_laporan'],
+                'keterangan' => $validatedData['keterangan'],
+                'lokasi' => $validatedData['lokasi'],
                 'foto' => $fotoPath['storage_path'], 
                 'face_verification_image' => $faceImagePath['storage_path'], 
                 'created_at' => new UTCDateTime($currentDate->timestamp * 1000),

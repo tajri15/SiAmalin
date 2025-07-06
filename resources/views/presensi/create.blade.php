@@ -435,20 +435,17 @@
                             
                             const resizedDetections = faceapi.resizeResults(detections, displaySize);
                             
-                            // Draw detection boxes and custom info
+                            // Draw detection boxes and name only
                             resizedDetections.forEach(detection => {
                                 const box = detection.detection.box;
                                 const nama = "{{ Auth::guard('karyawan')->user()->nama_lengkap }}";
-                                const similarity = (detection.detection.score * 100).toFixed(2);
                                 
-                                // Calculate required width (add 20px padding)
+                                // Calculate required width for name box
                                 ctx.font = 'bold 14px Poppins';
                                 const namaWidth = ctx.measureText(nama).width;
-                                ctx.font = '12px Poppins';
-                                const similarityWidth = ctx.measureText(`Similarity: ${similarity}%`).width;
-                                const boxWidth = Math.max(namaWidth, similarityWidth) + 40; // Extra padding
+                                const boxWidth = namaWidth + 40; // Extra padding
                                 
-                                // 1. Draw the face detection box (BLUE rectangle)
+                                // 1. Draw the face detection box (blue rectangle)
                                 ctx.strokeStyle = '#007bff';
                                 ctx.lineWidth = 2;
                                 ctx.strokeRect(box.x, box.y, box.width, box.height);
@@ -458,16 +455,16 @@
                                     faceapi.draw.drawFaceLandmarks(canvas, detection);
                                 }
                                 
-                                // 3. Draw custom info box (blue background)
+                                // 3. Draw name box (blue background)
                                 const infoBoxX = box.x + (box.width/2) - (boxWidth/2);
-                                const infoBoxY = box.y - 55;
+                                const infoBoxY = box.y - 35;
                                 
                                 ctx.fillStyle = 'rgba(0, 123, 255, 0.8)';
                                 ctx.fillRect(
                                     infoBoxX,
                                     infoBoxY,
                                     boxWidth,
-                                    50
+                                    30
                                 );
                                 
                                 // Draw name (centered)
@@ -477,15 +474,7 @@
                                 ctx.fillText(
                                     nama,
                                     box.x + (box.width/2),
-                                    infoBoxY + 30
-                                );
-                                
-                                // Draw similarity (centered)
-                                ctx.font = '12px Poppins';
-                                ctx.fillText(
-                                    `Similarity: ${similarity}%`,
-                                    box.x + (box.width/2),
-                                    infoBoxY + 45
+                                    infoBoxY + 22
                                 );
                                 
                                 // Reset text alignment
@@ -510,40 +499,28 @@
                     showError("Wajah tidak terdeteksi");
                     return;
                 }
-
+                
                 if (distance > maxRadius) {
                     showError(`Anda berada ${distance.toFixed(0)} meter dari kantor (max ${maxRadius}m)`);
                     return;
                 }
-
+                
                 try {
                     verifyBtn.disabled = true;
                     verifyBtn.classList.add('loading');
-                    verifyText.textContent = "Memproses...";
-
-                    // 1. Ambil gambar dari video
-                    const canvas = document.createElement('canvas');
+                    verifyText.textContent = "Memverifikasi...";
+                    
                     canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                    canvas.height = video.videoHeight;  
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const imageDataUrl = canvas.toDataURL('image/jpeg'); // untuk disimpan sbg bukti foto
-
-                    // 2. Hasilkan Face Descriptor menggunakan face-api.js
-                    const detectionWithDescriptor = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-                        .withFaceLandmarks()
-                        .withFaceDescriptor();
-
-                    if (!detectionWithDescriptor) {
-                        throw new Error("Gagal menghasilkan deskriptor wajah. Coba lagi.");
-                    }
-
-                    const faceDescriptor = Array.from(detectionWithDescriptor.descriptor); // Konversi ke array
-
-                    // 3. Kirim data ke server (termasuk deskriptor)
+                    
+                    const imageData = canvas.toDataURL('image/jpeg');
                     const lokasi = lokasiInput.value;
-                    const nik = document.getElementById('nik').value;
-
+                    const nik = document.getElementById('nik').value; // Ambil dari input hidden
+                    
+                    console.log('Data yang dikirim:', { nik, lokasi, image: imageData.substring(0, 50) + '...' });
+                    
                     const response = await fetch("{{ route('presensi.store') }}", {
                         method: 'POST',
                         headers: {
@@ -552,32 +529,35 @@
                             'Accept': 'application/json'
                         },
                         body: JSON.stringify({
-                            image: imageDataUrl, // Kirim foto sebagai bukti
+                            image: imageData,
                             lokasi: lokasi,
-                            nik: nik,
-                            face_descriptor: faceDescriptor // KIRIM DESKRIPTOR WAJAH
+                            nik: nik
                         })
                     });
-
+                    
                     const data = await response.json();
-
+                    
                     if (!response.ok) {
-                        throw new Error(data.error || "Verifikasi gagal");
+                        let errorMsg = data.error || "Verifikasi gagal";
+                        if (data.errors && data.errors.nik) {
+                            errorMsg = data.errors.nik[0];
+                        }
+                        throw new Error(errorMsg);
                     }
-
+                    
                     successMessage.textContent = data.success;
                     successModal.classList.add('active');
-
+                    
                     modalCloseBtn.addEventListener('click', function() {
                         successModal.classList.remove('active');
                         redirectAfterSuccess(data.redirect_url);
                     });
-
+                    
                     setTimeout(() => {
                         successModal.classList.remove('active');
                         redirectAfterSuccess(data.redirect_url);
                     }, 3000);
-
+                    
                 } catch (error) {
                     console.error("Verification error:", error);
                     showError(error.message);

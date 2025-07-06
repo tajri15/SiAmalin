@@ -33,6 +33,15 @@ class PresensiController extends Controller
         $user = Auth::guard('karyawan')->user();
         $pesanJadwal = null; 
 
+        // ================== TAMBAHAN BARU ==================
+        $faceDescriptor = null;
+        // Periksa apakah pengguna memiliki data wajah yang tersimpan
+        if ($user && !empty($user->face_embedding['embedding'])) {
+            // Encode descriptor ke format JSON agar bisa dibaca JavaScript
+            $faceDescriptor = json_encode($user->face_embedding['embedding']);
+        }
+        // =====================================================
+
         if ($user->jabatan === 'Petugas Keamanan') {
             if (empty($user->office_location)) {
                 session()->flash('error_presensi_create', 'Lokasi kantor Anda belum ditentukan. Harap hubungi Komandan atau Admin.');
@@ -56,17 +65,17 @@ class PresensiController extends Controller
                         ->whereBetween('tgl_presensi', [$tgl_presensi_start, $tgl_presensi_end])
                         ->first();
 
-        return view('presensi.create', compact('cek', 'user', 'pesanJadwal'));
+        // PERUBAHAN: Kirim variabel $faceDescriptor ke view
+        return view('presensi.create', compact('cek', 'user', 'pesanJadwal', 'faceDescriptor'));
     }
 
     public function store(Request $request)
     {
-        // PERUBAHAN: Validasi untuk menerima face_descriptor
         $validator = Validator::make($request->all(), [
             'lokasi' => 'required|string',
             'image' => 'required|string',
             'nik' => 'required|string|exists:karyawans,nik',
-            'face_descriptor' => 'sometimes|required|array', // 'sometimes' agar tidak error jika jabatan bukan petugas
+            'face_descriptor' => 'sometimes|required|array',
         ]);
 
         if ($validator->fails()) {
@@ -80,18 +89,18 @@ class PresensiController extends Controller
                 return response()->json(['error' => 'Data wajah Anda belum terdaftar.'], 403);
             }
 
-            // PERUBAHAN: Menggunakan service yang sudah diperbarui
             $faceVerification = $this->faceRecognitionService->verifyFaceDescriptor(
                 $request->face_descriptor,
                 $user->nik
             );
 
+            // ================== PERUBAHAN DI SINI ==================
             if (!$faceVerification['success'] || !$faceVerification['match']) {
-                $errorMessage = "Verifikasi wajah gagal. " . ($faceVerification['message'] ?? '');
-                // Memberi info tambahan tentang jarak untuk debugging
-                $errorMessage .= " (Jarak: " . round($faceVerification['distance'], 2) . ", Maks: " . $faceVerification['threshold'] . ")";
+                // Pesan error disederhanakan agar tidak membingungkan pengguna
+                $errorMessage = "Verifikasi wajah gagal: Wajah tidak cocok.";
                 return response()->json(['error' => $errorMessage], 401);
             }
+            // =======================================================
             
             if (empty($user->office_location)) {
                  return response()->json(['error' => 'Lokasi kantor Anda belum ditentukan.'], 400);
@@ -105,7 +114,7 @@ class PresensiController extends Controller
                 return response()->json(['error' => "Anda berada di luar radius kantor. Jarak: " . round($jarakResult['distance']) . "m."], 400);
             }
         }
-
+        
         $hariini = Carbon::today();
         $jam_sekarang_str = date("H:i:s");
         

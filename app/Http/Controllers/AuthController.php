@@ -144,9 +144,18 @@ class AuthController extends Controller
     // Verifikasi wajah (API) - unchanged, assuming for Petugas Keamanan
     public function verifyFace(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'face_image' => 'required|string',
-            'nik' => 'required|string'
+        // Ambil data dan decode descriptor jika perlu
+        $data = $request->all();
+        if (isset($data['face_descriptor']) && is_string($data['face_descriptor'])) {
+            $decodedDescriptor = json_decode($data['face_descriptor'], true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $data['face_descriptor'] = $decodedDescriptor;
+            }
+        }
+
+        $validator = Validator::make($data, [
+            'nik' => 'required|string|exists:karyawans,nik',
+            'face_descriptor' => 'required|array'
         ]);
 
         if ($validator->fails()) {
@@ -158,53 +167,20 @@ class AuthController extends Controller
         }
 
         try {
-            $startTime = microtime(true);
-            $karyawan = Karyawan::where('nik', $request->nik)->first();
-
-            if (!$karyawan) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Karyawan tidak ditemukan.'
-                ], 404);
-            }
-
-            if (empty($karyawan->face_embedding)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Wajah belum terdaftar untuk NIK ini.'
-                ], 404);
-            }
-
-            $verificationResult = $this->faceRecognitionService->verifyFace($request->face_image, $request->nik);
-
-            $isMatch = $verificationResult['match'] ?? false;
-            $similarity = $verificationResult['similarity'] ?? 0;
-            $threshold = $verificationResult['threshold'] ?? config('face_recognition.threshold');
-
-            if (config('face_recognition.log_verification_results', false)) {
-                Log::channel('face_verification')->info('Verification Attempt', [
-                    'nik' => $request->nik,
-                    'similarity' => $similarity,
-                    'threshold' => $threshold,
-                    'is_match' => $isMatch,
-                    'processing_time_ms' => (microtime(true) - $startTime) * 1000,
-                    'timestamp' => Carbon::now()->toDateTimeString(),
-                    'message' => $verificationResult['message'] ?? ($isMatch ? 'Wajah terverifikasi' : 'Wajah tidak cocok')
-                ]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'match' => $isMatch,
-                'similarity' => $similarity,
-                'threshold' => $threshold,
-                'message' => $verificationResult['message'] ?? ($isMatch ? 'Wajah terverifikasi' : 'Wajah tidak cocok')
-            ]);
+            // Panggil service dengan descriptor
+            $verificationResult = $this->faceRecognitionService->verifyFaceDescriptor(
+                $data['face_descriptor'],
+                $data['nik']
+            );
+            
+            // Kembalikan hasil dari service
+            return response()->json($verificationResult);
 
         } catch (\Exception $e) {
-            Log::error('Face verification API error: ' . $e->getMessage() . ' - Trace: ' . $e->getTraceAsString());
+            Log::error('Face verification API error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
+                'match' => false,
                 'message' => 'Terjadi kesalahan internal saat verifikasi wajah.'
             ], 500);
         }

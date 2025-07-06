@@ -25,7 +25,6 @@ class AdminKaryawanController extends Controller
     {
         $query = Karyawan::query();
 
-        // Search logic
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function($q) use ($search) {
@@ -35,14 +34,13 @@ class AdminKaryawanController extends Controller
             });
         }
 
-        // Sorting logic
         $sortBy = $request->get('sort_by', 'nama_lengkap');
         $sortOrder = $request->get('sort_order', 'asc');
         
         if (in_array($sortBy, ['nik', 'nama_lengkap', 'jabatan'])) {
             $query->orderBy($sortBy, $sortOrder);
         } else {
-            $query->orderBy('nama_lengkap', 'asc'); // Default sort
+            $query->orderBy('nama_lengkap', 'asc');
         }
 
         $karyawans = $query->paginate(10)->appends($request->query());
@@ -75,14 +73,13 @@ class AdminKaryawanController extends Controller
             'foto' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ];
 
-        if ($jabatan === 'Komandan') {
+        if ($jabatan === 'Komandan' || $jabatan === 'Ketua Departemen' || $jabatan === 'Petugas Keamanan') {
             $rules['fakultas_nama'] = 'required|string|exists:fakultas,nama';
-        } elseif ($jabatan === 'Ketua Departemen') {
-            $rules['fakultas_nama'] = 'required|string|exists:fakultas,nama';
+        }
+        if ($jabatan === 'Ketua Departemen' || $jabatan === 'Petugas Keamanan') {
             $rules['program_studi_nama'] = 'required|string|max:255';
-        } elseif ($jabatan === 'Petugas Keamanan') {
-            $rules['fakultas_nama'] = 'required|string|exists:fakultas,nama';
-            $rules['program_studi_nama'] = 'required|string|max:255';
+        }
+        if ($jabatan === 'Petugas Keamanan') {
             $rules['office_radius'] = 'required|numeric|min:1';
         }
         
@@ -91,66 +88,45 @@ class AdminKaryawanController extends Controller
         $karyawanData = $request->except(['password_confirmation', '_token', 'foto']);
         $karyawanData['password'] = Hash::make($request->password);
 
-        // Initialize fields
-        $karyawanData['is_admin'] = false;
-        $karyawanData['is_komandan'] = false;
-        $karyawanData['is_ketua_departemen'] = false;
+        $karyawanData['is_admin'] = ($jabatan === 'Admin');
+        $karyawanData['is_komandan'] = ($jabatan === 'Komandan');
+        $karyawanData['is_ketua_departemen'] = ($jabatan === 'Ketua Departemen');
+        
         $karyawanData['unit'] = null;
         $karyawanData['departemen'] = null;
         $karyawanData['office_location'] = null;
         $karyawanData['office_radius'] = null;
-        $karyawanData['face_embedding'] = null;
 
-        if ($jabatan === 'Admin') {
-            $karyawanData['is_admin'] = true;
-        } elseif ($jabatan === 'Komandan') {
-            $karyawanData['is_komandan'] = true;
-            $karyawanData['unit'] = $request->fakultas_nama;
-        } elseif ($jabatan === 'Ketua Departemen') {
-            $karyawanData['is_ketua_departemen'] = true;
-            $karyawanData['unit'] = $request->fakultas_nama;
+        if ($jabatan === 'Komandan' || $jabatan === 'Ketua Departemen' || $jabatan === 'Petugas Keamanan') {
+             $karyawanData['unit'] = $request->fakultas_nama;
+        }
+        if ($jabatan === 'Ketua Departemen' || $jabatan === 'Petugas Keamanan') {
             $karyawanData['departemen'] = $request->program_studi_nama;
-        } elseif ($jabatan === 'Petugas Keamanan') {
-            $karyawanData['unit'] = $request->fakultas_nama;
-            $karyawanData['departemen'] = $request->program_studi_nama;
+        }
+        if ($jabatan === 'Petugas Keamanan') {
+            $karyawanData['office_radius'] = (int)$request->office_radius;
 
             $fakultas = Fakultas::where('nama', $request->fakultas_nama)->first();
-            $office_location_coords = null;
-            $office_radius_val = $request->office_radius;
+            $office_location_string = null;
 
             if ($fakultas) {
                 if ($fakultas->tipe_fakultas === 'Teknik') {
                     $detailProdiArray = $fakultas->detail_prodi;
                     if (is_array($detailProdiArray)) {
                         foreach ($detailProdiArray as $prodi) {
-                            if (isset($prodi['nama_prodi']) && $prodi['nama_prodi'] === $request->program_studi_nama) {
-                                if (isset($prodi['koordinat'])) {
-                                    $coords = explode(',', $prodi['koordinat']);
-                                    if (count($coords) == 2) {
-                                        $office_location_coords = [floatval(trim($coords[1])), floatval(trim($coords[0]))]; // lng, lat
-                                    }
-                                }
+                            if (isset($prodi['nama_prodi']) && $prodi['nama_prodi'] === $request->program_studi_nama && isset($prodi['koordinat'])) {
+                                $office_location_string = $prodi['koordinat'];
                                 break;
                             }
                         }
                     }
                 } else { // Non-Teknik
-                    if ($fakultas->koordinat_fakultas) {
-                        $coords = explode(',', $fakultas->koordinat_fakultas);
-                        if (count($coords) == 2) {
-                            $office_location_coords = [floatval(trim($coords[1])), floatval(trim($coords[0]))]; // lng, lat
-                        }
-                    }
+                    $office_location_string = $fakultas->koordinat_fakultas;
                 }
             }
-
-            if ($office_location_coords) {
-                $karyawanData['office_location'] = ['type' => 'Point', 'coordinates' => $office_location_coords];
-            }
-            $karyawanData['office_radius'] = (int)$office_radius_val;
+            $karyawanData['office_location'] = $office_location_string;
         }
 
-        // Handle file upload
         $finalPath = null;
         if ($request->hasFile('foto')) {
             $filePath = $request->file('foto')->store('temp_uploads/karyawan_profile', 'public');
@@ -186,7 +162,7 @@ class AdminKaryawanController extends Controller
     {
         if (!session()->has('karyawan_temp_data')) {
             return redirect()->route('admin.karyawan.create')
-                             ->with('error', 'Silakan isi data karyawan terlebih dahulu');
+                         ->with('error', 'Silakan isi data karyawan terlebih dahulu');
         }
         $tempData = session('karyawan_temp_data');
         if ($tempData['jabatan'] !== 'Petugas Keamanan') {
@@ -204,7 +180,7 @@ class AdminKaryawanController extends Controller
 
         if (!$karyawanData) {
             return redirect()->route('admin.karyawan.create')
-                             ->with('error', 'Sesi pendaftaran telah kadaluarsa atau data tidak lengkap.');
+                      ->with('error', 'Sesi pendaftaran telah kadaluarsa atau data tidak lengkap.');
         }
         
         if ($karyawanData['jabatan'] !== 'Petugas Keamanan') {
@@ -215,8 +191,25 @@ class AdminKaryawanController extends Controller
 
         try {
             $faceEmbedding = $this->faceRecognitionService->generateFaceEmbedding(base64_decode(explode(',', $request->face_image)[1]));
+            
+            // PERBAIKAN: Menggunakan assignment manual untuk keamanan dan kejelasan
             $karyawan = new Karyawan();
-            $karyawan->fill($karyawanData);
+            $karyawan->nik = $karyawanData['nik'];
+            $karyawan->nama_lengkap = $karyawanData['nama_lengkap'];
+            $karyawan->jabatan = $karyawanData['jabatan'];
+            $karyawan->no_hp = $karyawanData['no_hp'];
+            $karyawan->password = $karyawanData['password'];
+            $karyawan->is_admin = $karyawanData['is_admin'];
+            $karyawan->is_komandan = $karyawanData['is_komandan'];
+            $karyawan->is_ketua_departemen = $karyawanData['is_ketua_departemen'];
+            $karyawan->unit = $karyawanData['unit'];
+            $karyawan->departemen = $karyawanData['departemen'];
+            $karyawan->office_radius = $karyawanData['office_radius'];
+            
+            // Mutator di model akan menangani konversi string "lat,lng" ke GeoJSON
+            $karyawan->office_location = $karyawanData['office_location'];
+            
+            // Tetapkan embedding
             $karyawan->face_embedding = $faceEmbedding;
 
             if ($tempFotoPath && Storage::disk('public')->exists($tempFotoPath)) {
@@ -226,21 +219,27 @@ class AdminKaryawanController extends Controller
                 Storage::disk('public')->move($tempFotoPath, $finalPath);
                 $karyawan->foto = $finalPath;
             }
+            
+            Log::info("Attempting to save Karyawan with NIK: " . $karyawan->nik);
             $karyawan->save();
+            Log::info("Successfully saved Karyawan with NIK: " . $karyawan->nik);
+
             session()->forget(['karyawan_temp_data', 'karyawan_temp_foto_path']);
+            
             return redirect()->route('admin.karyawan.index')
                              ->with('success', 'Karyawan berhasil didaftarkan dengan data wajah dan lokasi kantor.');
+
         } catch (\Exception $e) {
             Log::error('Error completing registration: ' . $e->getMessage() . ' - Trace: ' . $e->getTraceAsString());
             session()->forget(['karyawan_temp_data', 'karyawan_temp_foto_path']);
-            if ($tempFotoPath && Storage::disk('public')->exists($tempFotoPath)) {
+            if (isset($tempFotoPath) && $tempFotoPath && Storage::disk('public')->exists($tempFotoPath)) {
                 Storage::disk('public')->delete($tempFotoPath);
             }
             return redirect()->back()
                              ->with('error', 'Gagal memproses data wajah atau menyimpan karyawan: ' . $e->getMessage());
         }
     }
-
+    
     public function show($id)
     {
         $karyawan = Karyawan::findOrFail($id);
@@ -296,73 +295,54 @@ class AdminKaryawanController extends Controller
             'foto' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ];
 
-        if ($jabatan === 'Komandan') {
+        if ($jabatan === 'Komandan' || $jabatan === 'Ketua Departemen' || $jabatan === 'Petugas Keamanan') {
             $rules['fakultas_nama'] = 'required|string|exists:fakultas,nama';
-        } elseif ($jabatan === 'Ketua Departemen') {
-            $rules['fakultas_nama'] = 'required|string|exists:fakultas,nama';
+        }
+        if ($jabatan === 'Ketua Departemen' || $jabatan === 'Petugas Keamanan') {
             $rules['program_studi_nama'] = 'required|string|max:255';
-        } elseif ($jabatan === 'Petugas Keamanan') {
-            $rules['fakultas_nama'] = 'required|string|exists:fakultas,nama';
-            $rules['program_studi_nama'] = 'required|string|max:255';
+        }
+        if ($jabatan === 'Petugas Keamanan') {
             $rules['office_radius'] = 'required|numeric|min:1';
         }
 
         $request->validate($rules);
         $data = $request->only(['nik', 'nama_lengkap', 'jabatan', 'no_hp']);
 
-        $data['is_admin'] = false;
-        $data['is_komandan'] = false;
-        $data['is_ketua_departemen'] = false;
+        $data['is_admin'] = ($jabatan === 'Admin');
+        $data['is_komandan'] = ($jabatan === 'Komandan');
+        $data['is_ketua_departemen'] = ($jabatan === 'Ketua Departemen');
+        
         $data['unit'] = null;
         $data['departemen'] = null;
         $data['office_location'] = null;
         $data['office_radius'] = null;
 
-        if ($jabatan === 'Admin') {
-            $data['is_admin'] = true;
-        } elseif ($jabatan === 'Komandan') {
-            $data['is_komandan'] = true;
-            $data['unit'] = $request->fakultas_nama;
-        } elseif ($jabatan === 'Ketua Departemen') {
-            $data['is_ketua_departemen'] = true;
-            $data['unit'] = $request->fakultas_nama;
+        if ($jabatan === 'Komandan' || $jabatan === 'Ketua Departemen' || $jabatan === 'Petugas Keamanan') {
+             $data['unit'] = $request->fakultas_nama;
+        }
+        if ($jabatan === 'Ketua Departemen' || $jabatan === 'Petugas Keamanan') {
             $data['departemen'] = $request->program_studi_nama;
-        } elseif ($jabatan === 'Petugas Keamanan') {
-            $data['unit'] = $request->fakultas_nama;
-            $data['departemen'] = $request->program_studi_nama;
+        }
+        if ($jabatan === 'Petugas Keamanan') {
+            $data['office_radius'] = (int)$request->office_radius;
 
             $fakultas = Fakultas::where('nama', $request->fakultas_nama)->firstOrFail();
-            $office_location_coords = null;
-            $office_radius_val = $request->office_radius;
+            $office_location_string = null;
 
             if ($fakultas->tipe_fakultas === 'Teknik') {
                 $detailProdiArray = $fakultas->detail_prodi;
                 if (is_array($detailProdiArray)) {
                     foreach ($detailProdiArray as $prodi) {
-                        if (isset($prodi['nama_prodi']) && $prodi['nama_prodi'] === $request->program_studi_nama) {
-                            if (isset($prodi['koordinat'])) {
-                                $coords = explode(',', $prodi['koordinat']);
-                                if (count($coords) == 2) {
-                                    $office_location_coords = [floatval(trim($coords[1])), floatval(trim($coords[0]))];
-                                }
-                            }
+                        if (isset($prodi['nama_prodi']) && $prodi['nama_prodi'] === $request->program_studi_nama && isset($prodi['koordinat'])) {
+                            $office_location_string = $prodi['koordinat'];
                             break;
                         }
                     }
                 }
             } else {
-                if ($fakultas->koordinat_fakultas) {
-                    $coords = explode(',', $fakultas->koordinat_fakultas);
-                    if (count($coords) == 2) {
-                        $office_location_coords = [floatval(trim($coords[1])), floatval(trim($coords[0]))];
-                    }
-                }
+                $office_location_string = $fakultas->koordinat_fakultas;
             }
-
-            if ($office_location_coords) {
-                $data['office_location'] = ['type' => 'Point', 'coordinates' => $office_location_coords];
-            }
-            $data['office_radius'] = (int)$office_radius_val;
+            $data['office_location'] = $office_location_string;
         }
 
         if ($request->filled('password')) {
@@ -395,12 +375,6 @@ class AdminKaryawanController extends Controller
         return redirect()->route('admin.karyawan.index')->with('success', 'Karyawan berhasil dihapus.');
     }
 
-    public function viewFaceData($id)
-    {
-        $karyawan = Karyawan::findOrFail($id);
-        return view('admin.karyawan.face_data', compact('karyawan'));
-    }
-
     public function resetFaceData(Request $request, $id)
     {
         $karyawan = Karyawan::findOrFail($id);
@@ -409,8 +383,8 @@ class AdminKaryawanController extends Controller
         return redirect()->back()->with('success', 'Data wajah karyawan berhasil direset. Karyawan perlu registrasi wajah ulang jika diperlukan.');
     }
 
-     public function resetOfficeLocation(Request $request, $id)
-     {
+    public function resetOfficeLocation(Request $request, $id)
+    {
        $karyawan = Karyawan::findOrFail($id);
        $karyawan->office_location = null;
        $karyawan->office_radius = null;
