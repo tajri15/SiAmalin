@@ -17,9 +17,6 @@ use Illuminate\Support\Facades\Log;
 
 class KomandanDashboardController extends Controller
 {
-    /**
-     * Get base query for employees under the Commander's supervision.
-     */
     private function getScopedKaryawanQuery()
     {
         $komandan = Auth::guard('karyawan')->user();
@@ -29,9 +26,6 @@ class KomandanDashboardController extends Controller
                         ->where('is_komandan', false);
     }
 
-    /**
-     * Menampilkan dashboard utama untuk Komandan.
-     */
     public function index()
     {
         $komandan = Auth::guard('karyawan')->user();
@@ -72,19 +66,11 @@ class KomandanDashboardController extends Controller
         }
 
         return view('komandan.dashboard', compact(
-            'fakultasKomandan',
-            'jumlahPetugas',
-            'hadirHariIni',
-            'laporanBelumDitinjau',
-            'totalLaporanBulanIni',
-            'totalPatroliBulanIni',
-            'rekapPresensiBulanan'
+            'fakultasKomandan', 'jumlahPetugas', 'hadirHariIni',
+            'laporanBelumDitinjau', 'totalLaporanBulanIni', 'totalPatroliBulanIni', 'rekapPresensiBulanan'
         ));
     }
     
-    /**
-     * Menampilkan daftar karyawan (Petugas Keamanan) di bawah fakultas Komandan.
-     */
     public function dataKaryawan(Request $request)
     {
         $komandan = Auth::guard('karyawan')->user();
@@ -96,16 +82,13 @@ class KomandanDashboardController extends Controller
             $searchTerm = $request->search;
             $query->where(function ($q) use ($searchTerm) {
                 $q->where('nama_lengkap', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('nik', 'like', '%' . $searchTerm . '%');
+                  ->orWhere('nik', 'like', '%' . $searchTerm . '%');
             });
         }
         $karyawans = $query->orderBy('nama_lengkap')->paginate(10);
         return view('komandan.karyawan.index', compact('karyawans', 'fakultasKomandan'));
     }
 
-    /**
-     * Menampilkan halaman rekapitulasi presensi untuk Komandan.
-     */
     public function rekapPresensi(Request $request)
     {
         $komandan = Auth::guard('karyawan')->user();
@@ -118,66 +101,61 @@ class KomandanDashboardController extends Controller
 
         $petugasNiksInFakultas = $this->getScopedKaryawanQuery()->pluck('nik')->toArray();
 
-        $presensiData = collect(); 
-        if (!empty($petugasNiksInFakultas)) {
-            $query = Presensi::query()->whereIn('nik', $petugasNiksInFakultas);
+        $query = Presensi::query()->with('karyawan');
 
-            $startDate = Carbon::createFromDate($tahunIni, $bulanIni, 1)->startOfMonth();
-            $endDate = Carbon::createFromDate($tahunIni, $bulanIni, 1)->endOfMonth();
-
-            $query->whereBetween('tgl_presensi', [new UTCDateTime($startDate->copy()->startOfDay()->utc()->getTimestamp() * 1000), new UTCDateTime($endDate->copy()->endOfDay()->utc()->getTimestamp() * 1000)]);
-
-            if ($searchNik) {
-                $query->where('nik', 'like', '%' . $searchNik . '%');
-            }
-            if ($searchNama) {
-                $niksFromName = Karyawan::where('nama_lengkap', 'like', '%' . $searchNama . '%')
-                                        ->whereIn('nik', $petugasNiksInFakultas)
-                                        ->pluck('nik')->toArray();
-                $query->whereIn('nik', $niksFromName);
-            }
-            $presensiData = $query->with('karyawan')->orderBy('tgl_presensi', 'desc')->paginate(15);
+        if (empty($petugasNiksInFakultas)) {
+            $query->where('nik', 'mustahil-ditemukan');
+        } else {
+            $query->whereIn('nik', $petugasNiksInFakultas);
         }
+
+        $startDate = Carbon::createFromDate($tahunIni, $bulanIni, 1)->startOfMonth();
+        $endDate = Carbon::createFromDate($tahunIni, $bulanIni, 1)->endOfMonth();
+        $query->whereBetween('tgl_presensi', [new UTCDateTime($startDate->timestamp * 1000), new UTCDateTime($endDate->timestamp * 1000)]);
+
+        if ($searchNik) {
+            $query->where('nik', 'like', '%' . $searchNik . '%');
+        }
+        if ($searchNama) {
+            $query->whereHas('karyawan', function($q) use ($searchNama) {
+                $q->where('nama_lengkap', 'like', '%' . $searchNama . '%');
+            });
+        }
+        $presensiData = $query->orderBy('tgl_presensi', 'desc')->paginate(15);
         
         $namaBulan = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
         return view('komandan.presensi.rekapitulasi', compact('presensiData', 'bulanIni', 'tahunIni', 'namaBulan', 'searchNik', 'searchNama', 'fakultasKomandan'));
     }
 
-    /**
-     * Menampilkan laporan harian presensi untuk Komandan.
-     */
     public function laporanHarianPresensi(Request $request)
     {
         $komandan = Auth::guard('karyawan')->user();
         $fakultasKomandan = $komandan->unit;
         $tanggal = $request->input('tanggal', date('Y-m-d'));
         
-        $tglCariStart = new UTCDateTime(Carbon::parse($tanggal)->startOfDay()->utc()->getTimestamp() * 1000);
-        $tglCariEnd = new UTCDateTime(Carbon::parse($tanggal)->endOfDay()->utc()->getTimestamp() * 1000);
-        
         $petugasNiksInFakultas = $this->getScopedKaryawanQuery()->pluck('nik')->toArray();
-
-        $presensiHarian = collect();
-        if (!empty($petugasNiksInFakultas)) {
-            $presensiHarian = Presensi::whereIn('nik', $petugasNiksInFakultas)
-                                ->whereBetween('tgl_presensi', [$tglCariStart, $tglCariEnd])
-                                ->with('karyawan')
-                                ->orderBy('jam_in', 'asc')
-                                ->get();
+        
+        $query = Presensi::query()->with('karyawan');
+        
+        if (empty($petugasNiksInFakultas)) {
+            $query->where('nik', 'mustahil-ditemukan');
+        } else {
+            $tglStart = new UTCDateTime(Carbon::parse($tanggal)->startOfDay()->timestamp * 1000);
+            $tglEnd = new UTCDateTime(Carbon::parse($tanggal)->endOfDay()->timestamp * 1000);
+            $query->whereIn('nik', $petugasNiksInFakultas)
+                  ->whereBetween('tgl_presensi', [$tglStart, $tglEnd]);
         }
+        
+        $presensiHarian = $query->orderBy('jam_in', 'asc')->get();
 
         return view('komandan.presensi.harian', compact('presensiHarian', 'tanggal', 'fakultasKomandan'));
     }
 
-    /**
-     * Menampilkan detail presensi untuk karyawan tertentu di bawah Komandan.
-     */
     public function detailPresensiKaryawan(Request $request, $nik)
     {
         $komandan = Auth::guard('karyawan')->user();
         $fakultasKomandan = $komandan->unit;
-
         $karyawan = $this->getScopedKaryawanQuery()->where('nik', $nik)->firstOrFail();
         
         $bulan = $request->input('bulan', date('m'));
@@ -187,46 +165,33 @@ class KomandanDashboardController extends Controller
         $endDate = Carbon::createFromDate($tahun, $bulan, 1)->endOfMonth();
 
         $historiPresensi = Presensi::where('nik', $nik)
-                                    ->whereBetween('tgl_presensi', [new UTCDateTime($startDate->copy()->startOfDay()->utc()->getTimestamp() * 1000), new UTCDateTime($endDate->copy()->endOfDay()->utc()->getTimestamp() * 1000)])
-                                    ->orderBy('tgl_presensi', 'asc')
-                                    ->get();
+            ->whereBetween('tgl_presensi', [new UTCDateTime($startDate->timestamp * 1000), new UTCDateTime($endDate->timestamp * 1000)])
+            ->orderBy('tgl_presensi', 'asc')->get();
         
         $namaBulan = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-
         return view('komandan.presensi.detail_karyawan', compact('karyawan', 'historiPresensi', 'bulan', 'tahun', 'namaBulan', 'fakultasKomandan'));
     }
 
-    /**
-     * Menampilkan form untuk edit data presensi (jika Komandan diizinkan).
-     */
     public function editPresensi($id)
     {
         $komandan = Auth::guard('karyawan')->user();
         $fakultasKomandan = $komandan->unit;
 
         $presensi = Presensi::where('_id', $id)
-                            ->whereHas('karyawan', function($q) use ($fakultasKomandan){
-                                $q->where('unit', $fakultasKomandan)
-                                    ->where('jabatan', 'Petugas Keamanan');
-                            })
-                            ->with('karyawan')->firstOrFail();
+            ->whereHas('karyawan', fn($q) => $q->where('unit', $fakultasKomandan)->where('jabatan', 'Petugas Keamanan'))
+            ->with('karyawan')->firstOrFail();
                             
         return view('komandan.presensi.edit', compact('presensi', 'fakultasKomandan'));
     }
 
-    /**
-     * Memperbarui data presensi (jika Komandan diizinkan).
-     */
     public function updatePresensi(Request $request, $id)
     {
         $komandan = Auth::guard('karyawan')->user();
         $fakultasKomandan = $komandan->unit;
 
         $presensi = Presensi::where('_id', $id)
-                            ->whereHas('karyawan', function($q) use ($fakultasKomandan){
-                                $q->where('unit', $fakultasKomandan)
-                                    ->where('jabatan', 'Petugas Keamanan');
-                            })->firstOrFail();
+            ->whereHas('karyawan', fn($q) => $q->where('unit', $fakultasKomandan)->where('jabatan', 'Petugas Keamanan'))
+            ->firstOrFail();
 
         $validator = Validator::make($request->all(), [
             'tgl_presensi_edit' => 'required|date',
@@ -239,84 +204,62 @@ class KomandanDashboardController extends Controller
         }
 
         try {
-            $updateData = [
+            $presensi->update([
                 'tgl_presensi' => new UTCDateTime(Carbon::parse($request->tgl_presensi_edit)->startOfDay()->utc()->getTimestamp() * 1000),
                 'jam_in' => $request->jam_in_edit ?: null,
                 'jam_out' => $request->jam_out_edit ?: null,
-            ];
-
-            $presensi->update($updateData);
-
+            ]);
             return redirect()->route('komandan.presensi.rekapitulasi')->with('success', 'Data presensi berhasil diperbarui.');
-
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Gagal memperbarui data presensi: ' . $e->getMessage())->withInput();
         }
     }
 
-    /**
-     * Menampilkan daftar laporan karyawan untuk Komandan.
-     */
     public function laporanKaryawan(Request $request)
     {
         $komandan = Auth::guard('karyawan')->user();
         $fakultasKomandan = $komandan->unit;
-
         $petugasNiksInFakultas = $this->getScopedKaryawanQuery()->pluck('nik')->toArray();
         
-        $laporans = collect(); 
-
-        if (!empty($petugasNiksInFakultas)) {
-            $query = Laporan::with('karyawan')->whereIn('nik', $petugasNiksInFakultas);
-
-            if ($request->filled('tanggal_mulai') && $request->filled('tanggal_akhir')) {
-                $tanggalMulai = Carbon::parse($request->tanggal_mulai)->startOfDay();
-                $tanggalAkhir = Carbon::parse($request->tanggal_akhir)->endOfDay();
-                $query->whereBetween('created_at', [ new UTCDateTime($tanggalMulai->utc()->getTimestamp() * 1000), new UTCDateTime($tanggalAkhir->utc()->getTimestamp() * 1000)]);
-            } elseif ($request->filled('tanggal_mulai')) {
-                $tanggalMulai = Carbon::parse($request->tanggal_mulai)->startOfDay();
-                $query->where('created_at', '>=', new UTCDateTime($tanggalMulai->utc()->getTimestamp() * 1000));
-            } elseif ($request->filled('tanggal_akhir')) {
-                $tanggalAkhir = Carbon::parse($request->tanggal_akhir)->endOfDay();
-                $query->where('created_at', '<=', new UTCDateTime($tanggalAkhir->utc()->getTimestamp() * 1000));
-            }
-
-            if ($request->filled('nik_karyawan')) {
-                $query->where('nik', $request->nik_karyawan);
-            }
-            
-            if ($request->filled('nama_karyawan')) {
-                $niksFromName = Karyawan::where('nama_lengkap', 'like', '%' . $request->nama_karyawan . '%')->whereIn('nik', $petugasNiksInFakultas)->pluck('nik')->toArray();
-                $query->whereIn('nik', $niksFromName);
-            }
-
-            if ($request->filled('jenis_laporan')) {
-                $query->where('jenis_laporan', $request->jenis_laporan);
-            }
-
-            if ($request->filled('status_laporan')) { 
-                if ($request->status_laporan == 'belum_ditinjau') {
-                    $query->whereNull('status_admin');
-                } else {
-                    $query->where('status_admin', $request->status_laporan);
-                }
-            }
-            $laporans = $query->orderBy('created_at', 'desc')->paginate(15);
+        $query = Laporan::with('karyawan');
+        if (empty($petugasNiksInFakultas)) {
+            $query->where('nik', 'mustahil-ditemukan'); // Cara aman
+        } else {
+            $query->whereIn('nik', $petugasNiksInFakultas);
         }
+
+        if ($request->filled('tanggal_mulai') && $request->filled('tanggal_akhir')) {
+            $tanggalMulai = Carbon::parse($request->tanggal_mulai)->startOfDay();
+            $tanggalAkhir = Carbon::parse($request->tanggal_akhir)->endOfDay();
+            $query->whereBetween('created_at', [ new UTCDateTime($tanggalMulai->utc()->getTimestamp() * 1000), new UTCDateTime($tanggalAkhir->utc()->getTimestamp() * 1000)]);
+        } elseif ($request->filled('tanggal_mulai')) {
+            $tanggalMulai = Carbon::parse($request->tanggal_mulai)->startOfDay();
+            $query->where('created_at', '>=', new UTCDateTime($tanggalMulai->utc()->getTimestamp() * 1000));
+        } elseif ($request->filled('tanggal_akhir')) {
+            $tanggalAkhir = Carbon::parse($request->tanggal_akhir)->endOfDay();
+            $query->where('created_at', '<=', new UTCDateTime($tanggalAkhir->utc()->getTimestamp() * 1000));
+        }
+
+        if ($request->filled('nik_karyawan')) $query->where('nik', $request->nik_karyawan);
+        if ($request->filled('nama_karyawan')) $query->whereHas('karyawan', fn($q) => $q->where('nama_lengkap', 'like', '%' . $request->nama_karyawan . '%'));
+        if ($request->filled('jenis_laporan')) $query->where('jenis_laporan', $request->jenis_laporan);
+
+        if ($request->filled('status_laporan')) { 
+            if ($request->status_laporan == 'belum_ditinjau') $query->whereNull('status_admin');
+            else $query->where('status_admin', $request->status_laporan);
+        }
+        
+        $laporans = $query->orderBy('created_at', 'desc')->paginate(15);
         
         $petugasFakultas = $this->getScopedKaryawanQuery()->orderBy('nama_lengkap')->get(['nik', 'nama_lengkap']);
 
         return view('komandan.laporan.index', compact('laporans', 'petugasFakultas', 'fakultasKomandan'));
     }
 
-    /**
-     * Menampilkan detail laporan tertentu untuk Komandan.
-     */
     public function showLaporanKaryawan($id)
     {
         $komandan = Auth::guard('karyawan')->user();
         $fakultasKomandan = $komandan->unit;
-
         $laporan = Laporan::with('karyawan')->find($id);
 
         if (!$laporan || !$laporan->karyawan || $laporan->karyawan->unit !== $fakultasKomandan) {
@@ -326,130 +269,88 @@ class KomandanDashboardController extends Controller
         return view('komandan.laporan.show', compact('laporan', 'fakultasKomandan'));
     }
 
-    /**
-     * Memperbarui status laporan oleh Komandan.
-     */
     public function updateStatusLaporan(Request $request, $id)
     {
         $komandan = Auth::guard('karyawan')->user();
         $fakultasKomandan = $komandan->unit;
-
         $laporan = Laporan::with('karyawan')->find($id);
 
         if (!$laporan || !$laporan->karyawan || $laporan->karyawan->unit !== $fakultasKomandan) {
             return redirect()->route('komandan.laporan.show', $id)->with('error', 'Anda tidak berhak memperbarui status laporan ini.');
         }
         
-        $request->validate([
-            'status_admin' => 'required|string|in:Diterima,Ditolak',
-            'catatan_admin' => 'nullable|string|max:1000',
-        ]);
+        $request->validate(['status_admin' => 'required|string|in:Diterima,Ditolak', 'catatan_admin' => 'nullable|string|max:1000']);
         
-        $laporan->status_admin = $request->status_admin;
-        $laporan->catatan_admin = $request->catatan_admin;
-        $laporan->admin_peninjau_id = $komandan->nik; 
-        $laporan->tanggal_peninjauan_admin = new UTCDateTime(now()->timestamp * 1000);
-        $laporan->save();
+        $laporan->update([
+            'status_admin' => $request->status_admin,
+            'catatan_admin' => $request->catatan_admin,
+            'admin_peninjau_id' => $komandan->nik,
+            'tanggal_peninjauan_admin' => new UTCDateTime(now()->timestamp * 1000)
+        ]);
 
         return redirect()->route('komandan.laporan.show', $id)->with('success', 'Status laporan berhasil diperbarui.');
     }
 
-    /**
-     * Menampilkan histori patroli karyawan untuk Komandan.
-     */
     public function patroliKaryawan(Request $request)
     {
         $komandan = Auth::guard('karyawan')->user();
         $fakultasKomandan = $komandan->unit;
-
         $petugasNiksInFakultas = $this->getScopedKaryawanQuery()->pluck('nik')->toArray();
         
-        $patrols = collect();
+        $query = Patrol::with('karyawan')->where('status', 'selesai'); 
 
-        if(!empty($petugasNiksInFakultas)) {
-            $query = Patrol::with('karyawan')->whereIn('karyawan_nik', $petugasNiksInFakultas)->where('status', 'selesai'); 
-
-            if ($request->filled('nik_karyawan')) {
-                $query->where('karyawan_nik', $request->nik_karyawan);
-            }
-    
-            if ($request->filled('nama_karyawan')) {
-                $niksFromName = Karyawan::where('nama_lengkap', 'like', '%' . $request->nama_karyawan . '%')->whereIn('nik', $petugasNiksInFakultas)->pluck('nik')->toArray();
-                $query->whereIn('karyawan_nik', $niksFromName);
-            }
-
-            if ($request->filled('tanggal_mulai')) {
-                $tanggalMulai = Carbon::parse($request->tanggal_mulai)->startOfDay();
-                $query->where('start_time', '>=', new UTCDateTime($tanggalMulai->utc()->getTimestamp() * 1000));
-            }
-    
-            if ($request->filled('tanggal_akhir')) {
-                $tanggalAkhir = Carbon::parse($request->tanggal_akhir)->endOfDay();
-                $query->where('start_time', '<=', new UTCDateTime($tanggalAkhir->utc()->getTimestamp() * 1000));
-            }
-            $patrols = $query->orderBy('start_time', 'desc')->paginate(15);
+        if (empty($petugasNiksInFakultas)) {
+            $query->where('karyawan_nik', 'mustahil-ditemukan'); // Cara aman
+        } else {
+            $query->whereIn('karyawan_nik', $petugasNiksInFakultas);
         }
+
+        if ($request->filled('nik_karyawan')) $query->where('karyawan_nik', $request->nik_karyawan);
+        if ($request->filled('nama_karyawan')) $query->whereHas('karyawan', fn($q) => $q->where('nama_lengkap', 'like', '%' . $request->nama_karyawan . '%'));
+        if ($request->filled('tanggal_mulai')) $query->where('start_time', '>=', new UTCDateTime(Carbon::parse($request->tanggal_mulai)->startOfDay()->timestamp * 1000));
+        if ($request->filled('tanggal_akhir')) $query->where('start_time', '<=', new UTCDateTime(Carbon::parse($request->tanggal_akhir)->endOfDay()->timestamp * 1000));
+
+        $patrols = $query->orderBy('start_time', 'desc')->paginate(15);
         
         $petugasFakultas = $this->getScopedKaryawanQuery()->orderBy('nama_lengkap')->get(['nik', 'nama_lengkap']);
 
         return view('komandan.patroli.index', compact('patrols', 'petugasFakultas', 'fakultasKomandan'));
     }
 
-    /**
-     * Menampilkan detail patroli tertentu untuk Komandan.
-     */
     public function showPatroliKaryawan($patrolId)
     {
         $komandan = Auth::guard('karyawan')->user();
         $fakultasKomandan = $komandan->unit;
-
         $patrol = Patrol::with('karyawan')->find($patrolId);
 
         if (!$patrol || !$patrol->karyawan || $patrol->karyawan->unit !== $fakultasKomandan) {
             return redirect()->route('komandan.patroli.index')->with('error', 'Anda tidak berhak mengakses detail patroli ini.');
         }
         
-        $pathForMap = collect($patrol->path)->map(function ($point) { 
-            if (is_array($point) && count($point) >= 2 && is_numeric($point[0]) && is_numeric($point[1])) {
-                return [$point[1], $point[0]]; 
-            }
-            return null;  
-        })->filter()->toArray(); 
+        $pathForMap = collect($patrol->path)->map(fn($point) => (is_array($point) && count($point) >= 2 && is_numeric($point[0]) && is_numeric($point[1])) ? [$point[1], $point[0]] : null)->filter()->toArray(); 
 
         return view('komandan.patroli.show', compact('patrol', 'pathForMap', 'fakultasKomandan'));
     }
 
-    /**
-     * Menampilkan halaman monitoring patroli real-time untuk Komandan.
-     */
     public function monitoring()
     {
         return view('admin.patroli.monitoring');
     }
 
-    /**
-     * Menyediakan data untuk pemantauan real-time yang sudah difilter untuk Komandan.
-     */
     public function getLivePatrolData()
     {
         $komandan = Auth::guard('karyawan')->user();
         $fakultasKomandan = $komandan->unit;
-
         $petugasNiks = $this->getScopedKaryawanQuery()->pluck('nik')->toArray();
 
-        // PERBAIKAN: Mengambil status 'aktif' dan 'jeda'
         $activePatrols = Patrol::with('karyawan:nik,nama_lengkap,foto')
-                               ->whereIn('status', ['aktif', 'jeda'])
-                               ->whereIn('karyawan_nik', $petugasNiks)
-                               ->get(['_id', 'karyawan_nik', 'start_time', 'status']);
+            ->whereIn('status', ['aktif', 'jeda'])
+            ->whereIn('karyawan_nik', $petugasNiks)
+            ->get(['_id', 'karyawan_nik', 'start_time', 'status']);
 
         $liveData = [];
-
         foreach ($activePatrols as $patrol) {
-            $lastPoint = PatrolPoint::where('patrol_id', $patrol->_id)
-                                    ->orderBy('timestamp', 'desc')
-                                    ->first();
-
+            $lastPoint = PatrolPoint::where('patrol_id', $patrol->_id)->orderBy('timestamp', 'desc')->first();
             if ($lastPoint && $patrol->karyawan) {
                 $liveData[] = [
                     'patrol_id' => $patrol->_id,
@@ -458,13 +359,12 @@ class KomandanDashboardController extends Controller
                     'foto_url' => $patrol->karyawan->foto ? asset('storage/' . $patrol->karyawan->foto) : asset('assets/img/sample/avatar/avatar1.jpg'),
                     'latitude' => $lastPoint->latitude,
                     'longitude' => $lastPoint->longitude,
-                    'status' => $patrol->status, // Mengirim status ke frontend
+                    'status' => $patrol->status,
                     'last_update' => Carbon::parse($lastPoint->timestamp)->diffForHumans(),
                     'start_time' => Carbon::parse($patrol->start_time)->format('H:i:s'),
                 ];
             }
         }
-
         return response()->json($liveData);
     }
 }
