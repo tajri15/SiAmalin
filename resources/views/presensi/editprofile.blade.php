@@ -48,7 +48,7 @@
                             $foto = $user->foto ?? null;
                         @endphp
                         <img 
-                            src="{{ !empty($foto) ? asset('storage/uploads/karyawan/' . $foto) : asset('assets/img/sample/avatar/avatar1.jpg') }}" 
+                            src="{{ !empty($foto) ? asset('storage/' . $foto) : asset('assets/img/sample/avatar/avatar1.jpg') }}" 
                             alt="avatar" 
                             class="imaged w120 rounded-circle shadow" 
                             style="border: 3px solid #4e73df; padding: 4px; box-shadow: 0 6px 20px rgba(78, 115, 223, 0.3);">

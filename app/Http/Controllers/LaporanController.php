@@ -60,47 +60,54 @@ class LaporanController extends Controller
         return view('presensi.buatlaporan', compact('karyawan', 'faceDescriptor'));
     }
 
-    public function store(Request $request)
+public function store(Request $request)
     {
-        // Validasi tidak lagi memerlukan face_descriptor
         $validator = Validator::make($request->all(), [
             'tgl_laporan' => 'required|date',
             'jam' => 'required|date_format:H:i',
             'jenis_laporan' => 'required|in:harian,kegiatan,masalah',
             'keterangan' => 'required|string|max:2000',
             'lokasi' => 'required|string|max:255',
-            'foto' => 'required|string', // Foto bukti
-            'face_image' => 'required|string', // Foto verifikasi
+            'foto' => 'required|string', 
+            'face_image' => 'required|string',
             'nik' => 'required|string|exists:karyawans,nik'
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['success' => false, 'message' => 'Validasi gagal', 'errors' => $validator->errors()], 422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
         }
 
         if (Auth::guard('karyawan')->user()->nik !== $request->nik) {
-             return response()->json(['success' => false, 'message' => 'Aksi tidak diizinkan. NIK tidak sesuai.'], 403);
+             return response()->json([
+                'success' => false,
+                'message' => 'Aksi tidak diizinkan. NIK tidak sesuai.'
+            ], 403);
         }
         
+        // =====================================================================
+        // BLOK VERIFIKASI WAJAH DI SERVER DIHAPUS DARI SINI
+        // Server sekarang langsung percaya hasil verifikasi dari browser
+        // =====================================================================
+
         try {
-            // Verifikasi wajah dari gambar yang dikirim, bukan dari deskriptor
-            $faceVerification = $this->faceRecognitionService->verifyImageAgainstStored(
-                $request->face_image,
-                $request->nik
-            );
-
-            if (!$faceVerification['success'] || !$faceVerification['match']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $faceVerification['message'] ?? 'Verifikasi wajah gagal.',
-                ], 401);
-            }
-
             $currentDate = now();
             $yearMonth = $currentDate->format('Y/m');
             
-            $fotoPath = $this->processBase64Image($request->foto, "laporans/{$yearMonth}/evidence", 'evidence_' . $request->nik . '_' . time());
-            $faceImagePath = $this->processBase64Image($request->face_image, "laporans/{$yearMonth}/verification", 'faceverify_' . $request->nik . '_' . time());
+            $fotoPath = $this->processBase64Image(
+                $request->foto,
+                "laporans/{$yearMonth}/evidence",
+                'evidence_' . $request->nik . '_' . time()
+            );
+            
+            $faceImagePath = $this->processBase64Image(
+                $request->face_image,
+                "laporans/{$yearMonth}/verification",
+                'faceverify_' . $request->nik . '_' . time()
+            );
 
             $laporan = new Laporan([
                 'nik' => $request->nik,
@@ -128,7 +135,12 @@ class LaporanController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Laporan Store Error: '.$e->getMessage().' in '.$e->getFile().':'.$e->getLine(), ['trace' => $e->getTraceAsString()]);
-            return response()->json(['success' => false, 'message' => 'Gagal menyimpan laporan. Silakan coba lagi.', 'error' => config('app.debug') ? $e->getMessage() : 'Terjadi kesalahan internal.'], 500);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menyimpan laporan. Silakan coba lagi.',
+                'error' => config('app.debug') ? $e->getMessage() : 'Terjadi kesalahan internal.',
+            ], 500);
         }
     }
 

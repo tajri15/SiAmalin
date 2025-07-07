@@ -3,6 +3,10 @@ import json
 import os
 import warnings
 import contextlib
+import base64  # <-- INI BARIS PENTING YANG HILANG
+import numpy as np
+from io import BytesIO
+from PIL import Image
 
 # --- Blok untuk membungkam error sampingan ---
 warnings.filterwarnings('ignore')
@@ -10,14 +14,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ["DEEPFACE_HOME"] = "C:\\.deepface"
 # --- Akhir Blok ---
 
-# ===== PERBAIKAN DI SINI =====
-import base64 
-# ===============================
-
-import numpy as np
+# Import DeepFace setelah path diatur
 from deepface import DeepFace
-from io import BytesIO
-from PIL import Image
 
 MODEL_NAME = "Dlib"
 
@@ -61,6 +59,7 @@ def main(args):
                 )
                 print(json.dumps({"success": True, "match": bool(result["verified"])}))
             except Exception:
+                # Gagal jika wajah tidak terdeteksi di salah satu gambar
                 print(json.dumps({"success": True, "match": False, "message": "Wajah tidak terdeteksi di salah satu gambar."}))
                 
         else:
