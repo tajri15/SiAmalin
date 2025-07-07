@@ -255,8 +255,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
     $(document).ready(function() {
-        // Only proceed if office location exists
-        @if (!empty($user->office_location))
+        // Hanya lanjutkan jika lokasi kantor dan deskriptor wajah pengguna tersedia
+        @if (!empty($user->office_location) && isset($faceDescriptor))
             const video = document.getElementById('videoElement');
             const canvas = document.getElementById('canvasElement');
             const verifyBtn = document.getElementById('verifyBtn');
@@ -270,257 +270,165 @@
             const modalCloseBtn = document.getElementById('modalCloseBtn');
             
             let faceDetectionInterval;
-            let isFaceDetected = false;
+            let isFaceDetectedAndMatched = false;
             let map;
             let userMarker;
             let officeCircle;
             let distance = 0;
             
-            // Dynamic office coordinates from database
             const officeLat = {{ $user->office_location['coordinates'][1] }};
             const officeLng = {{ $user->office_location['coordinates'][0] }};
             const maxRadius = {{ $user->office_radius }};
+            const faceApiThreshold = {{ config('face_recognition.threshold', 0.6) }};
             
-            // 1. Load Face API Models
+            const storedDescriptor = new Float32Array(Object.values(JSON.parse('{!! $faceDescriptor !!}')));
+
             async function loadModels() {
                 try {
                     verifyBtn.disabled = true;
                     verifyText.textContent = "Memuat model...";
-                    
-                    await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-                    await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-                    await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
-                    await faceapi.nets.faceExpressionNet.loadFromUri('/models');
-                    
+                    await Promise.all([
+                        faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+                        faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
+                        faceapi.nets.faceRecognitionNet.loadFromUri('/models')
+                    ]);
                     startVideo();
                     initMap();
                 } catch (error) {
                     console.error("Gagal memuat model:", error);
-                    showError("Gagal memuat model pengenalan wajah");
+                    showError("Gagal memuat model pengenalan wajah. Silakan muat ulang halaman.");
                     verifyBtn.disabled = true;
                 }
             }
             
-            // 2. Start Video Stream
             async function startVideo() {
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ 
-                        video: {
-                            width: 640,
-                            height: 480,
-                            facingMode: 'user'
-                        }, 
+                        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, 
                         audio: false 
                     });
-                    
                     video.srcObject = stream;
-                    
-                    // Set canvas size same as video
                     video.onloadedmetadata = () => {
                         canvas.width = video.videoWidth;
                         canvas.height = video.videoHeight;
                         startFaceDetection();
                     };
-                    
                 } catch (error) {
-                    console.error("Error accessing camera:", error);
-                    showError("Tidak dapat mengakses kamera");
+                    showError("Tidak dapat mengakses kamera. Pastikan izin telah diberikan.");
                     verifyBtn.disabled = true;
                 }
             }
             
-            // 3. Initialize Map
             function initMap() {
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        position => {
-                            const userLat = position.coords.latitude;
-                            const userLng = position.coords.longitude;
-                            
-                            // Set lokasi input
-                            lokasiInput.value = `${userLat},${userLng}`;
-                            
-                            // Hitung jarak
-                            distance = calculateDistance(
-                                userLat, userLng, 
-                                officeLat, officeLng
-                            );
-                            
-                            // Update distance display
-                            distanceValue.textContent = distance.toFixed(0);
-                            
-                            // Initialize map centered at office location
-                            map = L.map('map').setView([officeLat, officeLng], 17);
-                            
-                            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                            }).addTo(map);
-                            
-                            // Add office marker
-                            L.marker([officeLat, officeLng])
-                                .addTo(map)
-                                .bindPopup("Lokasi Kantor")
-                                .openPopup();
-                            
-                            // Add user marker
-                            userMarker = L.marker([userLat, userLng])
-                                .addTo(map)
-                                .bindPopup("Lokasi Anda");
-                            
-                            // Add radius circle (color depends on distance)
-                            officeCircle = L.circle([officeLat, officeLng], {
-                                color: distance <= maxRadius ? '#4e73df' : '#dc3545',
-                                fillColor: distance <= maxRadius ? '#4e73df' : '#dc3545',
-                                fillOpacity: 0.2,
-                                radius: maxRadius
-                            }).addTo(map);
-                            
-                            // Update UI based on distance
-                            updateDistanceUI(distance);
-                        },
-                        error => {
-                            console.error("Geolocation error:", error);
-                            showError("Tidak dapat mendapatkan lokasi. Pastikan GPS aktif.");
-                            
-                            // Fallback: Show just the office location
-                            map = L.map('map').setView([officeLat, officeLng], 17);
-                            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                            }).addTo(map);
-                            
-                            L.marker([officeLat, officeLng])
-                                .addTo(map)
-                                .bindPopup("Lokasi Kantor")
-                                .openPopup();
-                            
-                            L.circle([officeLat, officeLng], {
-                                color: '#4e73df',
-                                fillColor: '#4e73df',
-                                fillOpacity: 0.2,
-                                radius: maxRadius
-                            }).addTo(map);
-                        },
-                        {
-                            enableHighAccuracy: true,
-                            timeout: 5000,
-                            maximumAge: 0
-                        }
-                    );
-                } else {
-                    showError("Browser tidak mendukung geolocation");
+                if (!navigator.geolocation) {
+                    showError("Browser tidak mendukung geolocation.");
+                    return;
                 }
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        const userLat = position.coords.latitude;
+                        const userLng = position.coords.longitude;
+                        lokasiInput.value = `${userLat},${userLng}`;
+                        distance = calculateDistance(userLat, userLng, officeLat, officeLng);
+                        
+                        map = L.map('map').setView([officeLat, officeLng], 17);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                        
+                        L.marker([officeLat, officeLng]).addTo(map).bindPopup("Lokasi Kantor").openPopup();
+                        userMarker = L.marker([userLat, userLng]).addTo(map).bindPopup("Lokasi Anda");
+                        officeCircle = L.circle([officeLat, officeLng], {
+                            color: distance <= maxRadius ? '#4e73df' : '#dc3545',
+                            fillColor: distance <= maxRadius ? '#4e73df' : '#dc3545',
+                            fillOpacity: 0.2,
+                            radius: maxRadius
+                        }).addTo(map);
+                        updateDistanceUI(distance);
+                    },
+                    error => {
+                        showError("Tidak dapat mendapatkan lokasi. Pastikan GPS aktif.");
+                        map = L.map('map').setView([officeLat, officeLng], 17);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                        L.marker([officeLat, officeLng]).addTo(map).bindPopup("Lokasi Kantor").openPopup();
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
             }
             
-            // 4. Face Detection
             function startFaceDetection() {
                 const displaySize = { width: video.videoWidth, height: video.videoHeight };
                 faceapi.matchDimensions(canvas, displaySize);
                 
                 faceDetectionInterval = setInterval(async () => {
-                    try {
-                        const detections = await faceapi.detectAllFaces(
-                            video, 
-                            new faceapi.TinyFaceDetectorOptions()
-                        ).withFaceLandmarks().withFaceDescriptors();
+                    const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    if (detections) {
+                        const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                        faceapi.draw.drawDetections(canvas, resizedDetections);
                         
-                        const ctx = canvas.getContext('2d');
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        const distanceMatch = faceapi.euclideanDistance(storedDescriptor, detections.descriptor);
+                        const isMatch = distanceMatch < faceApiThreshold;
                         
-                        if (detections.length > 0) {
-                            isFaceDetected = true;
-                            verifyBtn.disabled = distance > maxRadius;
-                            verifyText.textContent = distance > maxRadius 
-                                ? "Anda di luar radius" 
-                                : "Verifikasi Wajah";
-                            
-                            const resizedDetections = faceapi.resizeResults(detections, displaySize);
-                            
-                            // Draw detection boxes and name only
-                            resizedDetections.forEach(detection => {
-                                const box = detection.detection.box;
-                                const nama = "{{ Auth::guard('karyawan')->user()->nama_lengkap }}";
-                                
-                                // Calculate required width for name box
-                                ctx.font = 'bold 14px Poppins';
-                                const namaWidth = ctx.measureText(nama).width;
-                                const boxWidth = namaWidth + 40; // Extra padding
-                                
-                                // 1. Draw the face detection box (blue rectangle)
-                                ctx.strokeStyle = '#007bff';
-                                ctx.lineWidth = 2;
-                                ctx.strokeRect(box.x, box.y, box.width, box.height);
-                                
-                                // 2. Draw landmarks (if needed)
-                                if (detection.landmarks) {
-                                    faceapi.draw.drawFaceLandmarks(canvas, detection);
-                                }
-                                
-                                // 3. Draw name box (blue background)
-                                const infoBoxX = box.x + (box.width/2) - (boxWidth/2);
-                                const infoBoxY = box.y - 35;
-                                
-                                ctx.fillStyle = 'rgba(0, 123, 255, 0.8)';
-                                ctx.fillRect(
-                                    infoBoxX,
-                                    infoBoxY,
-                                    boxWidth,
-                                    30
-                                );
-                                
-                                // Draw name (centered)
-                                ctx.font = 'bold 14px Poppins';
-                                ctx.fillStyle = '#ffffff';
-                                ctx.textAlign = 'center';
-                                ctx.fillText(
-                                    nama,
-                                    box.x + (box.width/2),
-                                    infoBoxY + 22
-                                );
-                                
-                                // Reset text alignment
-                                ctx.textAlign = 'left';
-                            });
-                            
+                        const text = isMatch ? `Terverifikasi` : "Wajah tidak cocok";
+                        new faceapi.draw.DrawTextField([text], detections.detection.box.bottomLeft).draw(canvas);
+
+                        if (isMatch) {
+                            isFaceDetectedAndMatched = true;
+                            if (distance <= maxRadius) {
+                                verifyBtn.disabled = false;
+                                verifyText.textContent = "Lakukan Presensi";
+                            } else {
+                                verifyBtn.disabled = true;
+                                verifyText.textContent = "Anda di Luar Jangkauan";
+                            }
                         } else {
-                            isFaceDetected = false;
+                            isFaceDetectedAndMatched = false;
                             verifyBtn.disabled = true;
-                            verifyText.textContent = "Wajah tidak terdeteksi";
+                            verifyText.textContent = "Wajah Tidak Cocok";
                         }
-                    } catch (error) {
-                        console.error("Face detection error:", error);
-                        clearInterval(faceDetectionInterval);
+                    } else {
+                        isFaceDetectedAndMatched = false;
+                        verifyBtn.disabled = true;
+                        verifyText.textContent = "Wajah Tidak Terdeteksi";
                     }
-                }, 300);
+                }, 500);
             }
             
-            // 5. Verify Face
             verifyBtn.addEventListener('click', async () => {
-                if (!isFaceDetected) {
-                    showError("Wajah tidak terdeteksi");
+                if (!isFaceDetectedAndMatched) {
+                    showError("Verifikasi wajah belum berhasil.");
+                    return;
+                }
+                if (distance > maxRadius) {
+                    showError(`Anda berada ${distance.toFixed(0)}m dari kantor (maks. ${maxRadius}m)`);
                     return;
                 }
                 
-                if (distance > maxRadius) {
-                    showError(`Anda berada ${distance.toFixed(0)} meter dari kantor (max ${maxRadius}m)`);
+                verifyBtn.disabled = true;
+                verifyBtn.classList.add('loading');
+                verifyText.textContent = "Mengirim data...";
+                
+                // ================== PERBAIKAN DI SINI ==================
+                // Rantai pemanggilan fungsi harus lengkap untuk mendapatkan deskriptor.
+                const lastDetection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+                // =======================================================
+
+                if (!lastDetection) {
+                    showError("Wajah hilang saat mengirim. Coba lagi.");
+                    resetVerifyButton();
                     return;
                 }
+                const faceDescriptorToSend = Array.from(lastDetection.descriptor);
+                
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                const imageData = canvas.toDataURL('image/jpeg');
                 
                 try {
-                    verifyBtn.disabled = true;
-                    verifyBtn.classList.add('loading');
-                    verifyText.textContent = "Memverifikasi...";
-                    
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;  
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    
-                    const imageData = canvas.toDataURL('image/jpeg');
-                    const lokasi = lokasiInput.value;
-                    const nik = document.getElementById('nik').value; // Ambil dari input hidden
-                    
-                    console.log('Data yang dikirim:', { nik, lokasi, image: imageData.substring(0, 50) + '...' });
-                    
                     const response = await fetch("{{ route('presensi.store') }}", {
                         method: 'POST',
                         headers: {
@@ -530,61 +438,40 @@
                         },
                         body: JSON.stringify({
                             image: imageData,
-                            lokasi: lokasi,
-                            nik: nik
+                            lokasi: lokasiInput.value,
+                            nik: "{{ Auth::guard('karyawan')->user()->nik }}",
+                            face_descriptor: faceDescriptorToSend
                         })
                     });
                     
                     const data = await response.json();
                     
                     if (!response.ok) {
-                        let errorMsg = data.error || "Verifikasi gagal";
-                        if (data.errors && data.errors.nik) {
-                            errorMsg = data.errors.nik[0];
-                        }
-                        throw new Error(errorMsg);
+                        throw new Error(data.error || "Gagal mengirim data presensi.");
                     }
                     
-                    successMessage.textContent = data.success;
-                    successModal.classList.add('active');
-                    
-                    modalCloseBtn.addEventListener('click', function() {
-                        successModal.classList.remove('active');
-                        redirectAfterSuccess(data.redirect_url);
-                    });
-                    
-                    setTimeout(() => {
-                        successModal.classList.remove('active');
-                        redirectAfterSuccess(data.redirect_url);
-                    }, 3000);
+                    showSuccessModal(data.success, data.redirect_url);
                     
                 } catch (error) {
-                    console.error("Verification error:", error);
                     showError(error.message);
                     resetVerifyButton();
                 }
             });
             
-            // Helper functions
             function calculateDistance(lat1, lon1, lat2, lon2) {
-                const R = 6371;
-                const dLat = (lat2 - lat1) * Math.PI / 180;
-                const dLon = (lon2 - lon1) * Math.PI / 180;
-                const a = 
-                    Math.sin(dLat/2) * Math.sin(dLat/2) +
-                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-                    Math.sin(dLon/2) * Math.sin(dLon/2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                return R * c * 1000;
+                const R = 6371e3;
+                const φ1 = lat1 * Math.PI / 180;
+                const φ2 = lat2 * Math.PI / 180;
+                const Δφ = (lat2 - lat1) * Math.PI / 180;
+                const Δλ = (lon2 - lon1) * Math.PI / 180;
+                const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c;
             }
             
-            function updateDistanceUI(distance) {
-                distanceValue.textContent = distance.toFixed(0);
-                if (distance > maxRadius) {
-                    distanceIndicator.style.backgroundColor = 'rgba(220, 53, 69, 0.7)';
-                } else {
-                    distanceIndicator.style.backgroundColor = 'rgba(40, 167, 69, 0.7)';
-                }
+            function updateDistanceUI(dist) {
+                distanceValue.textContent = dist.toFixed(0);
+                distanceIndicator.style.backgroundColor = dist <= maxRadius ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)';
             }
             
             function showError(message) {
@@ -594,31 +481,37 @@
             }
             
             function resetVerifyButton() {
-                verifyBtn.disabled = !isFaceDetected || distance > maxRadius;
+                verifyBtn.disabled = !isFaceDetectedAndMatched || distance > maxRadius;
                 verifyBtn.classList.remove('loading');
-                verifyText.textContent = distance > maxRadius 
-                    ? "Anda di luar radius" 
-                    : "Verifikasi Wajah";
+                verifyText.textContent = "Verifikasi Wajah";
+            }
+
+            function showSuccessModal(message, redirectUrl) {
+                successMessage.textContent = message;
+                successModal.classList.add('active');
+                
+                const closeAndRedirect = () => {
+                    successModal.classList.remove('active');
+                    window.location.href = redirectUrl || '/dashboard';
+                };
+                
+                modalCloseBtn.onclick = closeAndRedirect;
+                setTimeout(closeAndRedirect, 3000);
             }
             
-            function redirectAfterSuccess(redirectUrl) {
-                if (redirectUrl) {
-                    window.location.href = redirectUrl;
-                } else {
-                    window.location.href = '/dashboard';
-                }
-            }
-            
-            // Start the process
             loadModels();
             
-            // Cleanup on page unload
             window.addEventListener('beforeunload', () => {
                 if (faceDetectionInterval) clearInterval(faceDetectionInterval);
                 if (video.srcObject) video.srcObject.getTracks().forEach(track => track.stop());
             });
         @else
-            console.error("Office location not set for user");
+            @if(empty($user->office_location))
+                showError("Lokasi kantor Anda belum diatur oleh admin.");
+            @else
+                showError("Data wajah Anda belum terdaftar. Hubungi admin.");
+            @endif
+            $('#verifyBtn').prop('disabled', true).text('Tidak Dapat Absen');
         @endif
     });
 </script>

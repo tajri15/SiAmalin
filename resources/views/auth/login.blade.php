@@ -1,14 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="id">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
+  <link rel="shortcut icon" href="{{ asset('assets/img/favicon.ico') }}" type="image/x-icon">
+  <link rel="icon" href="{{ asset('assets/img/favicon.png') }}" type="image/png">
   <title>SiAmalin - Login</title>
-  <link rel="icon" type="image/png" href="{{ asset('assets/img/favicon.png') }}?v=3">
-  <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('assets/img/icon/192x192.png') }}?v=3">
-  <link rel="shortcut icon" href="{{ asset('assets/img/favicon.ico') }}?v=3" type="image/x-icon">
+
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
@@ -24,11 +23,10 @@
       overflow: hidden;
     }
 
-    /* KODE BARU: Menambahkan .login-container untuk memusatkan form */
+    /* BARU: Menambahkan class container untuk pembungkus utama */
     .login-container {
         max-width: 400px;
         width: 100%;
-        padding: 0 15px; /* Memberi sedikit padding di layar kecil */
     }
 
     .card {
@@ -39,7 +37,7 @@
       animation: fadeIn 1s ease forwards;
       transform: translateY(30px);
       opacity: 0;
-      width: 100%; /* Kartu mengisi .login-container */
+      width: 100%;
     }
 
     .form-image {
@@ -66,7 +64,7 @@
 
     .btn-primary:hover {
       background: #0b5ed7;
-      transform: scale(1.05);
+      transform: scale(1.02); /* Sedikit disesuaikan agar lebih halus */
     }
 
     input.form-control {
@@ -92,6 +90,7 @@
       color: #6c757d;
       font-size: 1.2rem;
     }
+
     .input-icon.bi-x-circle {
       font-size: 1.1rem;
     }
@@ -100,18 +99,16 @@
       border-radius: 10px;
     }
     
-    .panel-login-link {
-      font-size: 0.85rem;
+    .footer-link a {
+        color: #003972;
+        font-weight: 500;
+        text-decoration: none;
+        transition: color 0.2s ease;
     }
-    .panel-login-link a {
-      color: #0d6efd;
-      font-weight: bold;
-      text-decoration: none;
-      transition: all 0.3s ease;
-    }
-    .panel-login-link a:hover {
-      color: #0b5ed7;
-      text-decoration: underline;
+
+    .footer-link a:hover {
+        color: #002b5c;
+        text-decoration: underline;
     }
 
     @keyframes fadeIn {
@@ -128,6 +125,7 @@
 </head>
 
 <body>
+  {{-- PERUBAHAN UTAMA ADA DI SINI --}}
   <div class="login-container">
     <div class="card p-4">
 
@@ -162,32 +160,43 @@
 
           <div class="mb-3 position-relative">
             <input type="text" name="nik" id="nik" class="form-control" placeholder="Masukkan NIK" required value="{{ old('nik') }}">
-            <i class="bi bi-x-circle input-icon" onclick="clearField('nik')" style="cursor: pointer;"></i>
+            <i class="bi bi-x-circle input-icon" onclick="clearField('nik')" style="cursor: pointer; display: none;" id="clearNikIcon"></i>
           </div>
 
           <div class="mb-3 position-relative">
             <input type="password" name="password" id="password" class="form-control" placeholder="Masukkan Password" required>
-            <i id="togglePasswordIcon" class="bi bi-eye input-icon" onclick="togglePassword()" style="cursor: pointer;"></i>
+            <i id="togglePasswordIcon" class="bi bi-eye-slash input-icon" onclick="togglePassword()" style="cursor: pointer;"></i>
           </div>
 
           <button type="submit" class="btn btn-primary w-100">Login</button>
-
-          <div class="text-center mt-3 panel-login-link">
-              <a href="{{ route('admin.login.form') }}">Login sebagai Admin/Komandan/Kadept</a>
-          </div>
-              
-            </form>
-          </div>
-        </div>
+        </form>
       </div>
+
     </div>
   </div>
 
   <script>
+    const nikInput = document.getElementById('nik');
+    const clearNikIcon = document.getElementById('clearNikIcon');
+
     function clearField(id) {
-      document.getElementById(id).value = '';
-      document.getElementById(id).focus();
+        const field = document.getElementById(id);
+        field.value = '';
+        field.focus();
+        if (id === 'nik') {
+            clearNikIcon.style.display = 'none';
+        }
     }
+
+    if(nikInput && clearNikIcon){
+        nikInput.addEventListener('input', function() {
+            clearNikIcon.style.display = this.value.length > 0 ? 'block' : 'none';
+        });
+        if (nikInput.value.length > 0) {
+             clearNikIcon.style.display = 'block';
+        }
+    }
+
 
     function togglePassword() {
       const passwordInput = document.getElementById('password');
@@ -195,12 +204,12 @@
 
       if (passwordInput.type === 'password') {
         passwordInput.type = 'text';
-        toggleIcon.classList.remove('bi-eye');
-        toggleIcon.classList.add('bi-eye-slash');
-      } else {
-        passwordInput.type = 'password';
         toggleIcon.classList.remove('bi-eye-slash');
         toggleIcon.classList.add('bi-eye');
+      } else {
+        passwordInput.type = 'password';
+        toggleIcon.classList.remove('bi-eye');
+        toggleIcon.classList.add('bi-eye-slash');
       }
     }
 
@@ -208,9 +217,11 @@
       setTimeout(function() {
         var successMessage = document.getElementById('successMessage');
         if (successMessage) {
-          successMessage.style.display = 'none';
+            successMessage.style.transition = 'opacity 0.5s ease';
+            successMessage.style.opacity = '0';
+            setTimeout(() => successMessage.style.display = 'none', 500);
         }
-      }, 3000); 
+      }, 3000);
     }
   </script>
 

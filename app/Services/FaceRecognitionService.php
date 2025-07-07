@@ -5,127 +5,110 @@ namespace App\Services;
 use App\Models\Karyawan;
 use Exception;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\Process\Process;
 
 class FaceRecognitionService
 {
-    /**
-     * Ambang batas (threshold) untuk Jarak Euclidean.
-     * Nilai umum untuk face-api.js adalah 0.6. Semakin kecil, semakin ketat.
-     * @var float
-     */
-    protected $threshold;
-    protected $embeddingVersion;
+    protected $pythonPath;
+    protected $scriptPath;
 
     public function __construct()
     {
-        $this->threshold = config('face_recognition.threshold', 0.6);
-        $this->embeddingVersion = config('face_recognition.embedding_version', 'v2');
+        $this->pythonPath = base_path('venv/Scripts/python.exe');
+        $this->scriptPath = base_path('face_recognition_service.py');
     }
 
-    /**
-     * Method BARU untuk pendaftaran: Membuat embedding dari gambar.
-     * Method ini dipanggil saat Admin mendaftarkan wajah karyawan baru.
-     *
-     * @param string $imageData Data gambar mentah (hasil base64_decode).
-     * @return array|null Array embedding atau null jika gagal.
-     */
-    public function generateFaceEmbedding($imageData)
+    private function runPythonScript(array $commandArgs): array
     {
-        // PENTING: Ini adalah implementasi tiruan (dummy).
-        // Di lingkungan produksi, Anda akan memanggil model Machine Learning di sini.
-        // Untuk tujuan pengembangan, kita buat data embedding acak.
-        try {
-            $embedding = [];
-            for ($i = 0; $i < 128; $i++) {
-                $embedding[] = mt_rand() / mt_getrandmax(); // Nilai float acak antara 0 dan 1
-            }
+        $processCommand = array_merge([$this->pythonPath, $this->scriptPath], $commandArgs);
+        Log::info('--- MEMULAI PROSES PYTHON (METODE FILE) ---');
+        Log::info('Executing command: ' . implode(' ', $processCommand));
 
-            // Normalisasi vektor (praktik umum untuk perbandingan kosinus/euclidean)
-            $norm = sqrt(array_sum(array_map(fn($x) => $x * $x, $embedding)));
-            if ($norm == 0) {
-                // Hindari pembagian dengan nol jika vektornya nol (sangat tidak mungkin)
-                $normalizedEmbedding = $embedding;
-            } else {
-                $normalizedEmbedding = array_map(fn($x) => $x / $norm, $embedding);
-            }
-
-            return [
-                'embedding' => $normalizedEmbedding,
-                'version' => $this->embeddingVersion,
-                'created_at' => now()->toDateTimeString()
-            ];
-        } catch (\Exception $e) {
-            Log::error('Error generating face embedding: ' . $e->getMessage());
-            throw $e; // Lemparkan kembali error agar bisa ditangkap oleh controller
+        $process = new Process($processCommand);
+        $process->setTimeout(120);
+        $process->run();
+        
+        if (!$process->isSuccessful()) {
+            $errorOutput = $process->getErrorOutput();
+            Log::error('ERROR dari Skrip Python: ' . $errorOutput);
+            throw new Exception('Proses Python gagal. Cek log. Error: ' . $errorOutput);
         }
+
+        $rawOutput = $process->getOutput();
+        Log::info('Output Mentah dari Python: ' . $rawOutput);
+
+        // ======================= PERBAIKAN UTAMA DI SINI =======================
+        // Mencari string JSON di dalam output mentah menggunakan regular expression.
+        // Ini akan menemukan blok yang diawali dengan { dan diakhiri dengan }
+        preg_match('/\{.*\}/s', $rawOutput, $matches);
+
+        if (empty($matches)) {
+            Log::error('Tidak ditemukan string JSON yang valid pada output Python.');
+            throw new Exception('Tidak ada output JSON dari skrip Python.');
+        }
+
+        // Hanya mengambil bagian JSON yang cocok
+        $jsonOutput = $matches[0];
+        $result = json_decode($jsonOutput, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            Log::error('Gagal memecahkan JSON dari Python setelah filtering.', ['filtered_json' => $jsonOutput]);
+            throw new Exception('Gagal memproses hasil JSON dari skrip pengenalan wajah.');
+        }
+        // =======================================================================
+
+        return $result;
     }
-
-    /**
-     * Membandingkan descriptor wajah yang baru dengan yang tersimpan di database.
-     * Method ini dipanggil saat karyawan melakukan presensi.
-     *
-     * @param array $newDescriptor Deskriptor dari frontend (berisi 128 float).
-     * @param string $nik NIK karyawan untuk dicocokkan.
-     * @return array Hasil verifikasi.
-     */
-    public function verifyFaceDescriptor(array $newDescriptor, string $nik): array
+    
+    // Fungsi generateDescriptorFromImage tidak perlu diubah
+    public function generateDescriptorFromImage(string $base64Image): ?array
     {
+        $tempImageFile = 'temp/face_generate_' . uniqid() . '.txt';
+        Storage::put($tempImageFile, $base64Image);
+        $imagePath = Storage::path($tempImageFile);
+
         try {
-            $karyawan = Karyawan::where('nik', $nik)->first();
-
-            if (!$karyawan) {
-                throw new Exception("Karyawan dengan NIK {$nik} tidak ditemukan.");
+            $result = $this->runPythonScript(['generate', $imagePath]);
+            if ($result['success'] && isset($result['descriptor'])) {
+                return $result['descriptor'];
             }
-
-            if (empty($karyawan->face_embedding) || !isset($karyawan->face_embedding['embedding'])) {
-                return $this->buildResult(false, 'Wajah belum terdaftar untuk karyawan ini.', 99); // Jarak 99 untuk menandakan tidak ada data
-            }
-
-            $storedDescriptor = $karyawan->face_embedding['embedding'];
-
-            if (count($newDescriptor) !== 128 || count($storedDescriptor) !== 128) {
-                throw new Exception('Format deskriptor wajah tidak valid.');
-            }
-
-            // Hitung Euclidean Distance, metode standar untuk face-api.js
-            $distance = $this->calculateEuclideanDistance($newDescriptor, $storedDescriptor);
-
-            // Jika jarak LEBIH KECIL dari threshold, maka wajah cocok.
-            $isMatch = $distance < $this->threshold;
-            $message = $isMatch ? 'Wajah terverifikasi' : 'Wajah tidak cocok';
-
-            return $this->buildResult($isMatch, $message, $distance);
-
+            Log::warning('Generate Descriptor Gagal (dari Python):', ['message' => $result['message'] ?? 'Unknown error.']);
         } catch (Exception $e) {
-            Log::error("Face descriptor verification failed for NIK {$nik}: " . $e->getMessage());
-            return $this->buildResult(false, $e->getMessage(), 99);
+            Log::error('FaceRecognitionService Exception:', ['error' => $e->getMessage()]);
+        } finally {
+            Storage::delete($tempImageFile);
         }
+        return null;
     }
 
-    /**
-     * Menghitung Jarak Euclidean antara dua vektor (descriptor).
-     */
-    private function calculateEuclideanDistance(array $a, array $b): float
+    // Fungsi verifyImageAgainstStored tidak perlu diubah
+    public function verifyImageAgainstStored(string $base64Image, string $nik): array
     {
-        $sum = 0;
-        $count = count($a); // Seharusnya 128
-        for ($i = 0; $i < $count; $i++) {
-            $sum += pow($a[$i] - $b[$i], 2);
+        $karyawan = Karyawan::where('nik', $nik)->first();
+        if (!$karyawan || empty($karyawan->foto)) {
+            return ['success' => false, 'match' => false, 'message' => 'Foto profil karyawan tidak ditemukan untuk perbandingan.'];
         }
-        return sqrt($sum);
-    }
 
-    /**
-     * Membangun array hasil yang konsisten.
-     */
-    private function buildResult(bool $match, string $message, float $distance): array
-    {
-        return [
-            'success' => true, // Menandakan API call berhasil, bukan hasil verifikasi
-            'match' => $match,
-            'message' => $message,
-            'distance' => $distance,
-            'threshold' => $this->threshold,
-        ];
+        $tempLiveImageFile = 'temp/face_verify_' . uniqid() . '.txt';
+        Storage::put($tempLiveImageFile, $base64Image);
+        
+        $liveImagePath = Storage::path($tempLiveImageFile);
+        $registeredPhotoPath = Storage::disk('public')->path($karyawan->foto);
+        
+        try {
+            $result = $this->runPythonScript(['verify', $liveImagePath, $registeredPhotoPath]);
+            if (!$result['success']) {
+                 throw new Exception($result['message'] ?? 'Verifikasi gagal di skrip Python.');
+            }
+            $finalResult = ['success' => true, 'match' => $result['match'], 'message' => $result['match'] ? 'Wajah terverifikasi.' : 'Wajah tidak cocok.'];
+        } catch (Exception $e) {
+            Log::error("Face verification failed for NIK {$nik}: " . $e->getMessage());
+            $finalResult = ['success' => false, 'match' => false, 'message' => 'Kesalahan internal saat verifikasi.'];
+        } finally {
+            Storage::delete($tempLiveImageFile);
+        }
+        
+        return $finalResult;
     }
 }

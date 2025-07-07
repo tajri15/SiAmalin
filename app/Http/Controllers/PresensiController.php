@@ -71,11 +71,11 @@ class PresensiController extends Controller
 
     public function store(Request $request)
     {
+        // Validasi sekarang tidak memerlukan face_descriptor
         $validator = Validator::make($request->all(), [
             'lokasi' => 'required|string',
-            'image' => 'required|string',
+            'image' => 'required|string', // Ini adalah gambar base64
             'nik' => 'required|string|exists:karyawans,nik',
-            'face_descriptor' => 'sometimes|required|array',
         ]);
 
         if ($validator->fails()) {
@@ -84,20 +84,20 @@ class PresensiController extends Controller
 
         $user = Karyawan::where('nik', $request->nik)->firstOrFail();
 
+        // Verifikasi dilakukan di backend
         if ($user->jabatan === 'Petugas Keamanan') {
             if (empty($user->face_embedding)) {
                 return response()->json(['error' => 'Data wajah Anda belum terdaftar.'], 403);
             }
 
-            $faceVerification = $this->faceRecognitionService->verifyFaceDescriptor(
-                $request->face_descriptor,
+            // Memanggil service yang aman
+            $faceVerification = $this->faceRecognitionService->verifyImageAgainstStored(
+                $request->image,
                 $user->nik
             );
 
-            // ================== PERUBAHAN DI SINI ==================
             if (!$faceVerification['success'] || !$faceVerification['match']) {
-                // Pesan error disederhanakan agar tidak membingungkan pengguna
-                $errorMessage = "Verifikasi wajah gagal: Wajah tidak cocok.";
+                $errorMessage = $faceVerification['message'] ?? 'Verifikasi wajah gagal.';
                 return response()->json(['error' => $errorMessage], 401);
             }
             // =======================================================
@@ -145,9 +145,7 @@ class PresensiController extends Controller
         $image_base64 = base64_decode($image_parts[1]);
         
         try {
-            $success = Storage::disk('public')->put($fullPath, $image_base64);
-            if (!$success) throw new \Exception("Gagal menyimpan file gambar.");
-            
+            Storage::disk('public')->put($fullPath, $image_base64);
             $savedPath = $fullPath;
 
             if ($isClockOut) {
@@ -160,15 +158,6 @@ class PresensiController extends Controller
                 return response()->json(['success' => 'Terimakasih, hati-hati di jalan!', 'status' => 'out', 'redirect_url' => url('/dashboard')]);
             } else {
                 Log::info("Membuat data presensi masuk baru untuk NIK: {$user->nik}");
-                if ($user->jabatan === 'Petugas Keamanan') {
-                    $jadwalHariIni = JadwalShift::where('karyawan_nik', $user->nik)
-                                                 ->where('tanggal', new UTCDateTime($startOfDay->timestamp * 1000))
-                                                 ->first();
-                    if (!$jadwalHariIni || strtoupper($jadwalHariIni->shift_nama) === 'LIBUR') {
-                        return response()->json(['error' => 'Anda tidak memiliki jadwal shift atau sedang libur hari ini.'], 403);
-                    }
-                }
-                
                 Presensi::create([
                     'nik' => $user->nik,
                     'tgl_presensi' => new UTCDateTime($startOfDay->timestamp * 1000),

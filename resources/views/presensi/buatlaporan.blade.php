@@ -34,14 +34,7 @@
 
                     <div class="webcam-container mb-3" style="position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #000;">
                         <video id="videoElement" autoplay playsinline style="width: 100%; display: block;"></video>
-                        <canvas id="canvasElement" style="display: none;"></canvas>
-                    </div>
-
-                    <div class="text-center">
-                        {{-- PERUBAHAN DI SINI: tambahkan 'disabled' dan ubah teks awal --}}
-                        <button type="button" id="verifyBtn" class="btn btn-primary" style="border-radius: 30px; padding: 10px 25px;" disabled>
-                            <ion-icon name="hourglass-outline" style="vertical-align: middle;"></ion-icon> Memuat Model...
-                        </button>
+                        <canvas id="canvasElement" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
                     </div>
 
                     <div id="verificationStatus" class="text-center mt-2"></div>
@@ -105,7 +98,7 @@
 
                     <div class="form-group mb-3">
                         <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Jenis Laporan</label>
-                        <select name="jenis_laporan" class="form-control" style="border-radius: 10px; height: 45px; border: 1px solid #e0e0e0; padding: 0 15px; appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill=\"%236c757d\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M7 10l5 5 5-5z\"/></svg>'); background-repeat: no-repeat; background-position: right 15px center; background-size: 15px;" required>
+                        <select name="jenis_laporan" class="form-control" style="border-radius: 10px; height: 45px; border: 1px solid #e0e0e0; padding: 0 15px;" required>
                             <option value="">Pilih Jenis Laporan</option>
                             <option value="harian">Harian</option>
                             <option value="kegiatan">Kegiatan</option>
@@ -133,321 +126,224 @@
     </div>
 </div>
 @endsection
+
 @push('myscript')
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // --- Inisialisasi Variabel dan Elemen DOM ---
-        const today = new Date().toISOString().split('T')[0];
-        $('#tgl_laporan').val(today);
-        const now = new Date();
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        $('#jam_laporan').val(`${hours}:${minutes}`);
+        // Cek jika data yang dibutuhkan dari controller ada
+        @if (isset($faceDescriptor) && $faceDescriptor !== 'null')
 
-        // Elemen Verifikasi Wajah
-        const video = document.getElementById('videoElement');
-        const canvas = document.getElementById('canvasElement');
-        const verifyBtn = document.getElementById('verifyBtn');
-        const verificationStatus = document.getElementById('verificationStatus');
-        const faceImageInput = document.getElementById('face_image');
-        const faceDescriptorInput = document.getElementById('face_descriptor');
+            // --- Inisialisasi Variabel dan Elemen DOM ---
+            const video = document.getElementById('videoElement');
+            const canvas = document.getElementById('canvasElement');
+            const verificationStatus = document.getElementById('verificationStatus');
+            const faceImageInput = document.getElementById('face_image');
+            const faceDescriptorInput = document.getElementById('face_descriptor');
+            const submitBtn = document.getElementById('submitBtn');
+            const fotoInput = document.getElementById('fotoInput');
+            const startCameraBtn = document.getElementById('startCameraBtn');
+            const capturePhotoBtn = document.getElementById('capturePhotoBtn');
+            const retryPhotoBtn = document.getElementById('retryPhotoBtn');
+            const photoCamera = document.getElementById('photoCamera');
+            const photoCanvas = document.getElementById('photoCanvas');
+            const photoPreview = document.getElementById('photoPreview');
+            const photoPreviewContainer = document.getElementById('photoPreviewContainer');
+            const cameraContainer = document.querySelector('.camera-container');
+            const photoTimestamp = document.getElementById('photoTimestamp');
+            const photoLocation = document.getElementById('photoLocation');
+            const coordinatesDisplay = document.getElementById('coordinatesDisplay');
+            const now = new Date();
+            $('#tgl_laporan').val(now.toISOString().split('T')[0]);
+            $('#jam_laporan').val(String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'));
 
-        // Elemen Foto Bukti
-        const photoCamera = document.getElementById('photoCamera');
-        const photoCanvas = document.getElementById('photoCanvas');
-        const photoPreview = document.getElementById('photoPreview');
-        const photoPreviewContainer = document.getElementById('photoPreviewContainer');
-        const cameraContainer = document.querySelector('.camera-container');
-        const photoTimestamp = document.getElementById('photoTimestamp');
-        const photoLocation = document.getElementById('photoLocation');
-        const startCameraBtn = document.getElementById('startCameraBtn');
-        const capturePhotoBtn = document.getElementById('capturePhotoBtn');
-        const retryPhotoBtn = document.getElementById('retryPhotoBtn');
-        const fotoInput = document.getElementById('fotoInput');
-        const coordinatesDisplay = document.getElementById('coordinatesDisplay');
-        
-        // Elemen Form
-        const submitBtn = document.getElementById('submitBtn');
+            let faceStream = null;
+            let photoStream = null;
+            let isFaceVerified = false;
+            let faceDetectionInterval;
+            
+            const faceApiThreshold = {{ config('face_recognition.threshold', 0.6) }};
+            const storedDescriptor = new Float32Array(Object.values(JSON.parse('{!! $faceDescriptor !!}')));
 
-        // Variabel State
-        let faceStream = null;
-        let photoStream = null;
-        let currentLocation = null;
-        let isFaceVerified = false;
-        let faceDescriptor = null;
-
-        // --- Fungsi Helper ---
-
-        async function getLocationName(lat, lng) {
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
-                const data = await response.json();
-                if (data.error) throw new Error(data.error);
-                return data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-            } catch (error) {
-                console.error("Geocoding Error:", error);
-                return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-            }
-        }
-
-        async function updateLocation() {
-            try {
-                photoLocation.textContent = "Lokasi: Memperbarui...";
-                const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }));
-                currentLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
-                coordinatesDisplay.textContent = `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}`;
-                const address = await getLocationName(currentLocation.lat, currentLocation.lng);
-                photoLocation.textContent = `Lokasi: ${address}`;
-                $('#lokasi').val(address);
-            } catch (error) {
-                photoLocation.textContent = "Lokasi: Gagal";
-                $('#lokasi').val("Lokasi tidak tersedia");
-                coordinatesDisplay.textContent = "Gagal mendapatkan lokasi";
-                Swal.fire({ icon: 'error', title: 'Gagal Mendapatkan Lokasi', text: 'Pastikan GPS dan izin lokasi telah diaktifkan.' });
-            }
-        }
-
-        function updateTimestamp() {
-            photoTimestamp.textContent = new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'medium' });
-        }
-        const timestampInterval = setInterval(updateTimestamp, 1000);
-
-        // --- Logika Utama ---
-
-        async function initFaceCamera() {
-            try {
-                verifyBtn.disabled = true;
-                verifyBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Memuat Model...`;
-                verificationStatus.innerHTML = `<div class="alert alert-info small p-2">Menyiapkan kamera, harap tunggu...</div>`;
-
+            // --- Fungsi Helper ---
+            function stopAllCameras() {
+                if (faceDetectionInterval) clearInterval(faceDetectionInterval);
                 if (faceStream) faceStream.getTracks().forEach(track => track.stop());
-                
-                faceStream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' }, audio: false });
-                video.srcObject = faceStream;
-
-                await Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-                    faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
-                    faceapi.nets.faceRecognitionNet.loadFromUri('/models')
-                ]);
-
-                verifyBtn.disabled = false;
-                verifyBtn.innerHTML = `<ion-icon name="scan-circle-outline"></ion-icon> Verifikasi Wajah`;
-                verificationStatus.innerHTML = `<div class="alert alert-primary small p-2">Sistem siap. Posisikan wajah Anda di depan kamera.</div>`;
-
-            } catch (error) {
-                console.error("Gagal memuat model atau kamera:", error);
-                let errorMessage = "Terjadi kesalahan. Coba muat ulang halaman.";
-                if (error.name === 'NotAllowedError') errorMessage = "Akses kamera ditolak. Harap izinkan akses kamera.";
-                else if (error.name === 'NotFoundError') errorMessage = "Kamera tidak ditemukan.";
-
-                verificationStatus.innerHTML = `<div class="alert alert-danger">${errorMessage}</div>`;
-                verifyBtn.innerHTML = `<ion-icon name="alert-circle-outline"></ion-icon> Gagal Memuat`;
-            }
-        }
-
-        verifyBtn.addEventListener('click', async function() {
-            verifyBtn.disabled = true;
-            verifyBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Memverifikasi...`;
-            verificationStatus.innerHTML = '';
-            
-            try {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = canvas.toDataURL('image/jpeg', 0.8);
-
-                const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-                if (!detection) {
-                    throw new Error("Wajah tidak terdeteksi. Posisikan wajah Anda dengan jelas.");
-                }
-
-                // Simpan deskriptor untuk dikirim
-                faceDescriptor = Array.from(detection.descriptor);
-                const nik = '{{ Auth::guard("karyawan")->user()->nik }}';
-                
-                // --- PERUBAHAN UTAMA: Lakukan verifikasi ke server SEKARANG ---
-                const response = await fetch('/face/verify', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        face_descriptor: faceDescriptor,
-                        nik: nik
-                    })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Verifikasi gagal dari server.');
-                }
-
-                // Periksa hasil 'match' dari server
-                if (data.match) {
-                    // Jika cocok, baru set status verified dan lanjutkan
-                    isFaceVerified = true;
-                    faceImageInput.value = imageData; // Simpan gambar untuk log
-                    faceDescriptorInput.value = JSON.stringify(faceDescriptor); // Simpan deskriptor untuk submit akhir
-                    checkFormCompletion();
-
-                    verificationStatus.innerHTML = `
-                        <div class="alert alert-success">
-                            Verifikasi berhasil! (Jarak: ${data.distance.toFixed(4)})<br>Silakan lengkapi sisa form.
-                        </div>
-                    `;
-                    verifyBtn.innerHTML = '<ion-icon name="checkmark-circle"></ion-icon> Verifikasi Sukses';
-                    verifyBtn.classList.replace('btn-primary', 'btn-success');
-                    if (faceStream) faceStream.getTracks().forEach(track => track.stop());
-                } else {
-                    // Jika tidak cocok, lempar error dengan pesan dari server
-                    throw new Error(`Wajah tidak cocok. (Jarak: ${data.distance.toFixed(4)}, Batas: ${data.threshold})`);
-                }
-
-            } catch (error) {
-                // Blok ini sekarang akan menangani semua jenis kegagalan
-                verificationStatus.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
-                verifyBtn.disabled = false;
-                verifyBtn.innerHTML = '<ion-icon name="scan-circle-outline"></ion-icon> Verifikasi Ulang';
-                faceDescriptor = null;
-                isFaceVerified = false;
-                checkFormCompletion();
-            }
-        });
-
-        startCameraBtn.addEventListener('click', async function() {
-            try {
                 if (photoStream) photoStream.getTracks().forEach(track => track.stop());
-                photoStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'environment' }, audio: false });
-                photoCamera.srcObject = photoStream;
-                cameraContainer.style.display = 'block';
-                photoPreviewContainer.style.display = 'none';
-                startCameraBtn.style.display = 'none';
-                capturePhotoBtn.style.display = 'inline-block';
-                retryPhotoBtn.style.display = 'none';
-            } catch (error) {
-                Swal.fire({ icon: 'error', title: 'Gagal Akses Kamera', text: 'Pastikan izin kamera belakang diberikan.' });
-            }
-        });
-
-        capturePhotoBtn.addEventListener('click', function() {
-            photoCanvas.width = photoCamera.videoWidth;
-            photoCanvas.height = photoCamera.videoHeight;
-            const ctx = photoCanvas.getContext('2d');
-            ctx.drawImage(photoCamera, 0, 0, photoCanvas.width, photoCanvas.height);
-            
-            ctx.font = 'bold 16px Courier New';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
-            ctx.lineWidth = 3;
-            const timestampText = photoTimestamp.textContent;
-            const locationText = photoLocation.textContent.replace('Lokasi: ', '');
-            ctx.strokeText(timestampText, 10, photoCanvas.height - 35);
-            ctx.fillText(timestampText, 10, photoCanvas.height - 35);
-            ctx.strokeText(locationText, 10, photoCanvas.height - 15);
-            ctx.fillText(locationText, 10, photoCanvas.height - 15);
-
-            const photoDataUrl = photoCanvas.toDataURL('image/jpeg', 0.8);
-            photoPreview.src = photoDataUrl;
-            fotoInput.value = photoDataUrl;
-
-            cameraContainer.style.display = 'none';
-            photoPreviewContainer.style.display = 'block';
-            capturePhotoBtn.style.display = 'none';
-            retryPhotoBtn.style.display = 'inline-block';
-
-            if (photoStream) photoStream.getTracks().forEach(track => track.stop());
-            checkFormCompletion();
-        });
-
-        retryPhotoBtn.addEventListener('click', function() {
-            photoPreviewContainer.style.display = 'none';
-            startCameraBtn.style.display = 'inline-block';
-            retryPhotoBtn.style.display = 'none';
-            fotoInput.value = '';
-            checkFormCompletion();
-        });
-
-        function checkFormCompletion() {
-            submitBtn.disabled = !(isFaceVerified && fotoInput.value);
-        }
-
-        $('#laporanForm').submit(function(e) {
-            e.preventDefault();
-            
-            if (!isFaceVerified || !faceDescriptor) {
-                Swal.fire('Gagal', 'Verifikasi wajah diperlukan sebelum mengirim laporan.', 'error');
-                return;
             }
 
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Mengirim...';
-            
-            const formData = new FormData(this);
-            // formData sudah mengambil face_descriptor dari input hidden
-            
-            $.ajax({
-                url: $(this).attr('action'),
-                type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false
-            })
-            .done(function(response) {
-                if (response.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Berhasil!',
-                        text: response.message,
-                        timer: 2000,
-                        showConfirmButton: false
-                    }).then(() => {
-                        window.location.href = response.redirect_url;
-                    });
-                } else {
-                    throw new Error(response.message || 'Gagal mengirim laporan');
+            // --- Logika Utama ---
+
+            // 1. Inisialisasi Kamera Verifikasi Wajah
+            async function initFaceCamera() {
+                try {
+                    verificationStatus.innerHTML = `<div class="alert alert-info small p-2">Mempersiapkan kamera verifikasi...</div>`;
+                    if (faceStream) faceStream.getTracks().forEach(track => track.stop());
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' }, audio: false });
+                    video.srcObject = stream;
+                    faceStream = stream;
+
+                    video.onloadedmetadata = () => {
+                        verificationStatus.innerHTML = `<div class="alert alert-primary small p-2">Sistem siap. Posisikan wajah Anda di depan kamera.</div>`;
+                        startFaceDetection();
+                    };
+                } catch (error) {
+                    verificationStatus.innerHTML = `<div class="alert alert-danger">Kamera Error: ${error.message}</div>`;
                 }
-            })
-            .fail(function(jqXHR) {
-                let errorTitle = 'Oops... Terjadi Kesalahan!';
-                let errorMsg = 'Gagal mengirim laporan. Silakan coba lagi.';
+            }
 
-                if (jqXHR.status === 422 && jqXHR.responseJSON) {
-                    errorTitle = jqXHR.responseJSON.message || 'Validasi Gagal';
-                    const errors = jqXHR.responseJSON.errors;
-                    let errorList = '<ul class="list-unstyled text-start mt-2" style="padding-left: 10px;">';
-                    for (const field in errors) {
-                        errors[field].forEach(err => {
-                            errorList += `<li class="mb-1"><small>${err}</small></li>`;
-                        });
+            // 2. Mulai Deteksi Wajah secara Real-time
+            function startFaceDetection() {
+                const displaySize = { width: video.videoWidth, height: video.videoHeight };
+                faceapi.matchDimensions(canvas, displaySize);
+
+                faceDetectionInterval = setInterval(async () => {
+                    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    if (detection) {
+                        const distance = faceapi.euclideanDistance(storedDescriptor, detection.descriptor);
+                        const isMatch = distance < faceApiThreshold;
+
+                        if (isMatch) {
+                            clearInterval(faceDetectionInterval); // Hentikan deteksi jika sudah cocok
+                            verificationStatus.innerHTML = `<div class="alert alert-success p-2 small"><strong>Verifikasi Berhasil!</strong> (Jarak: ${distance.toFixed(2)})</div>`;
+                            video.style.border = '3px solid #1cc88a';
+                            
+                            // Ambil gambar & deskriptor untuk disimpan
+                            const canvasForSaving = document.createElement('canvas');
+                            canvasForSaving.width = video.videoWidth;
+                            canvasForSaving.height = video.videoHeight;
+                            canvasForSaving.getContext('2d').drawImage(video, 0, 0);
+                            
+                            faceImageInput.value = canvasForSaving.toDataURL('image/jpeg');
+                            faceDescriptorInput.value = JSON.stringify(Array.from(detection.descriptor));
+                            
+                            isFaceVerified = true;
+                            checkFormCompletion();
+                            stopCamera(); // Matikan kamera setelah sukses
+                        } else {
+                            verificationStatus.innerHTML = `<div class="alert alert-warning p-2 small">Wajah tidak dikenali. Coba lagi.</div>`;
+                        }
+                    } else {
+                        verificationStatus.innerHTML = `<div class="alert alert-secondary p-2 small">Arahkan wajah ke kamera...</div>`;
                     }
-                    errorList += '</ul>';
-                    errorMsg = errorList;
-                } else if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
-                    errorMsg = jqXHR.responseJSON.message;
-                }
-                Swal.fire({ icon: 'error', title: errorTitle, html: errorMsg, confirmButtonColor: '#4e73df' });
-            })
-            .always(function() {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<ion-icon name="send-outline"></ion-icon> Kirim Laporan';
-            });
-        });
+                }, 1000);
+            }
 
-        // --- Inisialisasi Awal & Cleanup ---
-        initFaceCamera();
-        updateLocation();
+            // 3. Logika untuk Kamera Bukti
+            startCameraBtn.addEventListener('click', async function() {
+                try {
+                    if (photoStream) photoStream.getTracks().forEach(track => track.stop());
+                    photoStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'environment' }, audio: false });
+                    photoCamera.srcObject = photoStream;
+                    cameraContainer.style.display = 'block';
+                    startCameraBtn.style.display = 'none';
+                    capturePhotoBtn.style.display = 'inline-block';
+                    retryPhotoBtn.style.display = 'none';
+                    updateLocation(); // Panggil saat kamera dibuka
+                    updateTimestamp();
+                } catch (error) {
+                    Swal.fire({ icon: 'error', title: 'Gagal Akses Kamera', text: 'Pastikan izin kamera belakang diberikan.' });
+                }
+            });
+
+            capturePhotoBtn.addEventListener('click', function() {
+                // ... (Logika capture foto bukti Anda, sudah benar)
+                photoCanvas.width = photoCamera.videoWidth;
+                photoCanvas.height = photoCamera.videoHeight;
+                const ctx = photoCanvas.getContext('2d');
+                ctx.drawImage(photoCamera, 0, 0, photoCanvas.width, photoCanvas.height);
+                // ... (Logika menambahkan watermark)
+                const photoDataUrl = photoCanvas.toDataURL('image/jpeg', 0.8);
+                photoPreview.src = photoDataUrl;
+                fotoInput.value = photoDataUrl;
+
+                cameraContainer.style.display = 'none';
+                photoPreviewContainer.style.display = 'block';
+                capturePhotoBtn.style.display = 'none';
+                retryPhotoBtn.style.display = 'inline-block';
+                if (photoStream) photoStream.getTracks().forEach(track => track.stop());
+                checkFormCompletion();
+            });
+
+            retryPhotoBtn.addEventListener('click', function() {
+                photoPreviewContainer.style.display = 'none';
+                startCameraBtn.style.display = 'inline-block';
+                retryPhotoBtn.style.display = 'none';
+                fotoInput.value = '';
+                checkFormCompletion();
+            });
+
+            // 4. Cek Kelengkapan Form untuk Aktifkan Tombol Submit
+            function checkFormCompletion() {
+                const isFormComplete = isFaceVerified &&
+                                     fotoInput.value &&
+                                     $('#tgl_laporan').val() &&
+                                     $('#jam_laporan').val() &&
+                                     $('select[name="jenis_laporan"]').val() &&
+                                     $('textarea[name="keterangan"]').val() &&
+                                     $('#lokasi').val();
+                submitBtn.disabled = !isFormComplete;
+            }
+
+            // Tambahkan listener ke setiap input form
+            $('#laporanForm input, #laporanForm select, #laporanForm textarea').on('input change', checkFormCompletion);
+            
+            // 5. Submit Form
+            $('#laporanForm').submit(function(e) {
+                e.preventDefault();
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Mengirim...';
+
+                $.ajax({
+                    url: $(this).attr('action'),
+                    type: 'POST',
+                    data: new FormData(this),
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        if (response.success) {
+                            Swal.fire({
+                                icon: 'success', title: 'Berhasil!', text: response.message, timer: 2000, showConfirmButton: false
+                            }).then(() => { window.location.href = response.redirect_url; });
+                        } else {
+                            throw new Error(response.message || 'Gagal mengirim laporan');
+                        }
+                    },
+                    error: function(jqXHR) {
+                         let errorMsg = jqXHR.responseJSON ? jqXHR.responseJSON.message : "Terjadi kesalahan.";
+                         Swal.fire({ icon: 'error', title: 'Error', text: errorMsg });
+                    },
+                    complete: function() {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<ion-icon name="send-outline"></ion-icon> Kirim Laporan';
+                    }
+                });
+            });
+
+            // --- Inisialisasi Awal ---
+            Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri('{{ asset("models") }}'),
+                faceapi.nets.faceLandmark68Net.loadFromUri('{{ asset("models") }}'),
+                faceapi.nets.faceRecognitionNet.loadFromUri('{{ asset("models") }}')
+            ]).then(initFaceCamera).catch(err => {
+                 verificationStatus.innerHTML = `<div class="alert alert-danger">Gagal memuat model. Periksa koneksi internet dan muat ulang.</div>`;
+            });
+
+            updateLocation();
+            window.addEventListener('beforeunload', stopAllCameras);
         
-        window.addEventListener('beforeunload', function() {
-            clearInterval(timestampInterval);
-            if (faceStream) faceStream.getTracks().forEach(track => track.stop());
-            if (photoStream) photoStream.getTracks().forEach(track => track.stop());
-        });
+        @else
+            // Jika data wajah tidak ada atau data kantor tidak ada
+            $('#verificationStatus').html(`<div class="alert alert-danger">Anda tidak dapat membuat laporan karena data wajah belum terdaftar atau lokasi kantor belum diatur. Harap hubungi admin.</div>`);
+            // Disable semua input form
+            $('#laporanForm').find('input, select, textarea, button').prop('disabled', true);
+        @endif
     });
 </script>
 @endpush

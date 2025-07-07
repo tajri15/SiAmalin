@@ -9,38 +9,36 @@
             <h6 class="m-0 font-weight-bold text-primary">Registrasi Wajah untuk {{ session('karyawan_temp_data.nama_lengkap') }}</h6>
         </div>
         <div class="card-body">
+            @if(session('error'))
+                <div class="alert alert-danger">{{ session('error') }}</div>
+            @endif
             <div class="alert alert-info">
-                <strong>Petunjuk:</strong> Pastikan karyawan berada di tempat dengan pencahayaan yang baik dan wajah terlihat jelas. 
-                Minta karyawan untuk menatap kamera langsung tanpa menggunakan aksesoris yang menutupi wajah.
+                <strong>Petunjuk:</strong> Pastikan wajah karyawan terlihat jelas, menghadap lurus ke kamera, dan berada dalam pencahayaan yang baik.
             </div>
 
             <div class="text-center mb-4">
-                <div id="camera-container" style="width: 500px; height: 375px; margin: 0 auto; border: 3px solid #ddd; position: relative;">
-                    <video id="video" width="500" height="375" autoplay></video>
-                    <canvas id="canvas" width="500" height="375" style="display:none;"></canvas>
+                <div id="camera-container" style="width: 500px; height: 375px; margin: 0 auto; border: 3px solid #ddd; position: relative; background-color: #000;">
+                    <video id="video" width="500" height="375" autoplay playsinline style="display: none;"></video>
+                    <canvas id="canvas" width="500" height="375" style="position: absolute; top: 0; left: 0;"></canvas>
+                    <div id="preview-container" style="width: 100%; height: 100%; display: none;">
+                        <img id="preview" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
                 </div>
-                <button id="capture-btn" class="btn btn-primary mt-3">
-                    <i class="fas fa-camera"></i> Ambil Foto
-                </button>
-                <button id="retake-btn" class="btn btn-warning mt-3" style="display:none;">
-                    <i class="fas fa-redo"></i> Ambil Ulang
-                </button>
+                <div id="status-text" class="mt-2 fw-bold">Mempersiapkan kamera...</div>
             </div>
-
-            <div id="preview-container" style="display:none;">
-                <h5>Preview Wajah</h5>
-                <img id="preview" src="" alt="Preview Wajah" class="img-thumbnail mb-3">
-                <p class="text-muted">Pastikan wajah terlihat jelas dan tidak blur sebelum melanjutkan.</p>
-            </div>
-
-            <form id="registration-form" action="{{ route('admin.karyawan.complete_registration') }}" method="POST" style="display:none;">
+            
+            <form id="registration-form" action="{{ route('admin.karyawan.complete_registration') }}" method="POST">
                 @csrf
                 <input type="hidden" id="face_image" name="face_image">
-                <div class="mt-4">
-                    <a href="{{ route('admin.karyawan.create') }}" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left"></i> Kembali ke Form Data
-                    </a>
-                    <button type="submit" class="btn btn-success">
+                <div class="text-center">
+                    <a href="{{ route('admin.karyawan.create') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Kembali</a>
+                    <button type="button" id="captureBtn" class="btn btn-primary" disabled>
+                        <i class="fas fa-camera"></i> Ambil Gambar
+                    </button>
+                    <button type="button" id="retakeBtn" class="btn btn-warning" style="display: none;">
+                        <i class="fas fa-sync-alt"></i> Ulangi
+                    </button>
+                    <button type="submit" id="submitBtn" class="btn btn-success" style="display: none;">
                         <i class="fas fa-check-circle"></i> Selesaikan Pendaftaran
                     </button>
                 </div>
@@ -49,106 +47,98 @@
     </div>
 </div>
 
-<!-- Load Face API -->
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script>
-    // Inisialisasi kamera
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const context = canvas.getContext('2d');
-    const captureBtn = document.getElementById('capture-btn');
-    const retakeBtn = document.getElementById('retake-btn');
-    const preview = document.getElementById('preview');
-    const previewContainer = document.getElementById('preview-container');
-    const registrationForm = document.getElementById('registration-form');
-    const faceImageInput = document.getElementById('face_image');
+    document.addEventListener('DOMContentLoaded', async () => {
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const statusText = document.getElementById('status-text');
+        const captureBtn = document.getElementById('captureBtn');
+        const retakeBtn = document.getElementById('retakeBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const registrationForm = document.getElementById('registration-form');
+        const faceImageInput = document.getElementById('face_image');
+        const previewContainer = document.getElementById('preview-container');
+        const previewImg = document.getElementById('preview');
 
-    let stream = null;
-    let capturedImage = null;
+        let stream = null;
+        let detectionInterval = null;
 
-    // Memuat model face-api.js
-    async function loadModels() {
+        statusText.textContent = "Memuat model deteksi wajah...";
         try {
-            await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-            await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-            await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
-            return true;
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+                faceapi.nets.faceLandmark68Net.loadFromUri('/models')
+            ]);
         } catch (e) {
-            console.error('Gagal memuat model:', e);
-            alert('Gagal memuat model deteksi wajah. Silakan refresh halaman.');
-            return false;
+            statusText.textContent = "Gagal memuat model. Periksa konsol untuk detail.";
+            return;
         }
-    }
 
-    // Memulai kamera
-    async function startCamera() {
         try {
-            stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    width: 500, 
-                    height: 375,
-                    facingMode: 'user' 
-                }, 
-                audio: false 
-            });
+            stream = await navigator.mediaDevices.getUserMedia({ video: {} });
             video.srcObject = stream;
+            video.style.display = 'block';
         } catch (err) {
-            console.error("Error accessing camera:", err);
-            alert("Tidak dapat mengakses kamera. Pastikan Anda memberikan izin akses kamera.");
-        }
-    }
-
-    // Menangkap gambar dari kamera
-    captureBtn.addEventListener('click', async () => {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        capturedImage = canvas.toDataURL('image/jpeg');
-        
-        // Deteksi wajah
-        const detections = await faceapi.detectAllFaces(canvas, 
-            new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
-        
-        if (detections.length === 0) {
-            alert('Tidak terdeteksi wajah. Pastikan wajah terlihat jelas di dalam frame.');
-            return;
-        }
-        
-        if (detections.length > 1) {
-            alert('Terdeteksi lebih dari satu wajah. Pastikan hanya satu wajah yang terlihat.');
+            statusText.textContent = "Error: Tidak dapat mengakses kamera. Pastikan izin telah diberikan.";
             return;
         }
 
-        // Tampilkan preview
-        preview.src = capturedImage;
-        previewContainer.style.display = 'block';
-        registrationForm.style.display = 'block';
-        captureBtn.style.display = 'none';
-        retakeBtn.style.display = 'inline-block';
+        video.addEventListener('play', () => {
+            statusText.textContent = "Arahkan wajah ke kamera...";
+            const displaySize = { width: video.width, height: video.height };
+            faceapi.matchDimensions(canvas, displaySize);
+
+            detectionInterval = setInterval(async () => {
+                const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
+                const context = canvas.getContext('2d');
+                context.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (detections) {
+                    const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                    faceapi.draw.drawDetections(canvas, resizedDetections);
+                    statusText.textContent = "Wajah terdeteksi. Silakan ambil gambar.";
+                    statusText.classList.remove('text-danger');
+                    statusText.classList.add('text-success');
+                    captureBtn.disabled = false;
+                } else {
+                    statusText.textContent = "Wajah tidak terdeteksi. Posisikan wajah di tengah kamera.";
+                    statusText.classList.remove('text-success');
+                    statusText.classList.add('text-danger');
+                    captureBtn.disabled = true;
+                }
+            }, 500);
+        });
+
+        captureBtn.addEventListener('click', () => {
+            clearInterval(detectionInterval);
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, video.width, video.height);
+            const dataUrl = canvas.toDataURL('image/jpeg');
+
+            faceImageInput.value = dataUrl;
+            previewImg.src = dataUrl;
+            
+            video.style.display = 'none';
+            previewContainer.style.display = 'block';
+
+            captureBtn.style.display = 'none';
+            retakeBtn.style.display = 'inline-block';
+            submitBtn.style.display = 'inline-block';
+            statusText.textContent = "Gambar berhasil diambil. Klik 'Selesaikan' untuk menyimpan.";
+        });
         
-        // Set nilai untuk form
-        faceImageInput.value = capturedImage;
-    });
+        retakeBtn.addEventListener('click', () => {
+            video.style.display = 'block';
+            previewContainer.style.display = 'none';
+            
+            captureBtn.style.display = 'inline-block';
+            retakeBtn.style.display = 'none';
+            submitBtn.style.display = 'none';
+            
+            video.play(); // Re-trigger 'play' event to start detection
+        });
 
-    // Mengambil ulang foto
-    retakeBtn.addEventListener('click', () => {
-        previewContainer.style.display = 'none';
-        registrationForm.style.display = 'none';
-        captureBtn.style.display = 'inline-block';
-        retakeBtn.style.display = 'none';
-    });
-
-    // Inisialisasi
-    window.addEventListener('DOMContentLoaded', async () => {
-        const modelsLoaded = await loadModels();
-        if (modelsLoaded) {
-            await startCamera();
-        }
-    });
-
-    // Membersihkan stream saat keluar dari halaman
-    window.addEventListener('beforeunload', () => {
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-        }
     });
 </script>
 @endsection

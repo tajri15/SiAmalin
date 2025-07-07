@@ -25,7 +25,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminMiddleware::class,
             'komandan' => \App\Http\Middleware\KomandanMiddleware::class,
-            'ketua.departemen' => \App\Http\Middleware\KetuaDepartemenMiddleware::class, // Ditambahkan
+            'ketua.departemen' => \App\Http\Middleware\KetuaDepartemenMiddleware::class,
+            'prevent.caching' => \App\Http\Middleware\PreventCaching::class,
             'auth' => \Illuminate\Auth\Middleware\Authenticate::class,
             'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
             'auth.session' => \Illuminate\Session\Middleware\AuthenticateSession::class,
@@ -48,6 +49,7 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\ClearRegistrationSession::class,
+            \App\Http\Middleware\PreventCaching::class
         ]);
 
     })

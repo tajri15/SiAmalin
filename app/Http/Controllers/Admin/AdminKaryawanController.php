@@ -173,14 +173,17 @@ class AdminKaryawanController extends Controller
 
     public function completeRegistration(Request $request)
     {
-        $request->validate(['face_image' => 'required|string']);
+        // Validasi sekarang untuk gambar base64, bukan deskriptor
+        $request->validate([
+            'face_image' => 'required|string',
+        ]);
 
         $karyawanData = session('karyawan_temp_data');
         $tempFotoPath = session('karyawan_temp_foto_path');
 
         if (!$karyawanData) {
             return redirect()->route('admin.karyawan.create')
-                      ->with('error', 'Sesi pendaftaran telah kadaluarsa atau data tidak lengkap.');
+                             ->with('error', 'Sesi pendaftaran telah kadaluarsa atau data tidak lengkap.');
         }
         
         if ($karyawanData['jabatan'] !== 'Petugas Keamanan') {
@@ -190,55 +193,47 @@ class AdminKaryawanController extends Controller
         }
 
         try {
-            $faceEmbedding = $this->faceRecognitionService->generateFaceEmbedding(base64_decode(explode(',', $request->face_image)[1]));
-            
-            // PERBAIKAN: Menggunakan assignment manual untuk keamanan dan kejelasan
+            // Hasilkan deskriptor di backend dari gambar yang dikirim
+            $descriptor = $this->faceRecognitionService->generateDescriptorFromImage($request->face_image);
+
+            if (!$descriptor) {
+                return redirect()->back()->with('error', 'Gagal mendeteksi wajah pada gambar. Silakan coba lagi dengan pencahayaan yang lebih baik dan posisi wajah lurus.')->withInput();
+            }
+
+            $faceEmbeddingData = [
+                'embedding' => $descriptor,
+                'version' => 'v2_py', // Tandai versi baru dari python
+                'created_at' => now()->toDateTimeString()
+            ];
+
             $karyawan = new Karyawan();
-            $karyawan->nik = $karyawanData['nik'];
-            $karyawan->nama_lengkap = $karyawanData['nama_lengkap'];
-            $karyawan->jabatan = $karyawanData['jabatan'];
-            $karyawan->no_hp = $karyawanData['no_hp'];
-            $karyawan->password = $karyawanData['password'];
-            $karyawan->is_admin = $karyawanData['is_admin'];
-            $karyawan->is_komandan = $karyawanData['is_komandan'];
-            $karyawan->is_ketua_departemen = $karyawanData['is_ketua_departemen'];
-            $karyawan->unit = $karyawanData['unit'];
-            $karyawan->departemen = $karyawanData['departemen'];
-            $karyawan->office_radius = $karyawanData['office_radius'];
-            
-            // Mutator di model akan menangani konversi string "lat,lng" ke GeoJSON
-            $karyawan->office_location = $karyawanData['office_location'];
-            
-            // Tetapkan embedding
-            $karyawan->face_embedding = $faceEmbedding;
+            $karyawan->fill($karyawanData);
+            $karyawan->face_embedding = $faceEmbeddingData;
 
             if ($tempFotoPath && Storage::disk('public')->exists($tempFotoPath)) {
                 $originalFile = new \Illuminate\Http\File(storage_path('app/public/' . $tempFotoPath));
-                $newFileName = \Illuminate\Support\Str::random(40) . '.' . $originalFile->guessExtension();
+                $newFileName = Str::random(40) . '.' . $originalFile->guessExtension();
                 $finalPath = 'uploads/karyawan/' . $newFileName;
                 Storage::disk('public')->move($tempFotoPath, $finalPath);
                 $karyawan->foto = $finalPath;
             }
             
-            Log::info("Attempting to save Karyawan with NIK: " . $karyawan->nik);
             $karyawan->save();
-            Log::info("Successfully saved Karyawan with NIK: " . $karyawan->nik);
-
-            session()->forget(['karyawan_temp_data', 'karyawan_temp_foto_path']);
             
+            session()->forget(['karyawan_temp_data', 'karyawan_temp_foto_path']);
             return redirect()->route('admin.karyawan.index')
                              ->with('success', 'Karyawan berhasil didaftarkan dengan data wajah dan lokasi kantor.');
-
         } catch (\Exception $e) {
             Log::error('Error completing registration: ' . $e->getMessage() . ' - Trace: ' . $e->getTraceAsString());
             session()->forget(['karyawan_temp_data', 'karyawan_temp_foto_path']);
-            if (isset($tempFotoPath) && $tempFotoPath && Storage::disk('public')->exists($tempFotoPath)) {
-                Storage::disk('public')->delete($tempFotoPath);
+            if (isset($finalPath) && Storage::disk('public')->exists($finalPath)) {
+                Storage::disk('public')->delete($finalPath);
             }
             return redirect()->back()
                              ->with('error', 'Gagal memproses data wajah atau menyimpan karyawan: ' . $e->getMessage());
         }
     }
+
     
     public function show($id)
     {

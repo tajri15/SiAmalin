@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Laporan;
-use App\Models\Karyawan; // PASTIKAN BARIS INI ADA
+use App\Models\Karyawan;
 use App\Services\FaceRecognitionService;
 use Illuminate\Support\Facades\Auth;
 use MongoDB\BSON\UTCDateTime;
@@ -30,7 +30,7 @@ class LaporanController extends Controller
                           ->get()
                           ->map(function($item) {
                               if ($item->tanggal instanceof UTCDateTime) {
-                                  $item->tanggal_formatted = Carbon::parse($item->tanggal->toDateTime())->isoFormat('D MMM YY'); // Disesuaikan formatnya
+                                  $item->tanggal_formatted = Carbon::parse($item->tanggal->toDateTime())->isoFormat('D MMM YY');
                               } elseif ($item->tanggal instanceof \DateTimeInterface) {
                                   $item->tanggal_formatted = Carbon::parse($item->tanggal)->isoFormat('D MMM YY');
                               } else {
@@ -48,96 +48,67 @@ class LaporanController extends Controller
         if (!$karyawan) {
             return redirect()->route('login')->with('error', 'Anda harus login untuk membuat laporan.');
         }
-        return view('presensi.buatlaporan', compact('karyawan'));
+
+        $faceDescriptor = null;
+        // Periksa apakah pengguna memiliki data wajah yang tersimpan
+        if ($karyawan && !empty($karyawan->face_embedding['embedding'])) {
+            // Encode descriptor ke format JSON agar bisa dibaca JavaScript
+            $faceDescriptor = json_encode($karyawan->face_embedding['embedding']);
+        }
+        
+        // Kirim variabel $faceDescriptor ke view
+        return view('presensi.buatlaporan', compact('karyawan', 'faceDescriptor'));
     }
 
     public function store(Request $request)
     {
-        // Ambil semua data dari request
-        $data = $request->all();
-
-        // --- PERBAIKAN: Ubah string JSON face_descriptor menjadi array PHP sebelum validasi ---
-        if (isset($data['face_descriptor']) && is_string($data['face_descriptor'])) {
-            $decodedDescriptor = json_decode($data['face_descriptor'], true);
-            if (json_last_error() === JSON_ERROR_NONE) {
-                $data['face_descriptor'] = $decodedDescriptor;
-            } else {
-                // Jika decode gagal, set ke null agar validasi gagal dengan benar
-                $data['face_descriptor'] = null; 
-            }
-        }
-
-        // Validasi data yang sudah dimodifikasi
-        $validator = Validator::make($data, [
+        // Validasi tidak lagi memerlukan face_descriptor
+        $validator = Validator::make($request->all(), [
             'tgl_laporan' => 'required|date',
             'jam' => 'required|date_format:H:i',
             'jenis_laporan' => 'required|in:harian,kegiatan,masalah',
             'keterangan' => 'required|string|max:2000',
             'lokasi' => 'required|string|max:255',
-            'foto' => 'required|string',
-            'face_image' => 'required|string',
-            'nik' => 'required|string|exists:karyawans,nik',
-            'face_descriptor' => 'required|array' // Aturan ini sekarang akan berhasil
+            'foto' => 'required|string', // Foto bukti
+            'face_image' => 'required|string', // Foto verifikasi
+            'nik' => 'required|string|exists:karyawans,nik'
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal, periksa kembali data yang Anda masukkan.',
-                'errors' => $validator->errors()
-            ], 422);
+            return response()->json(['success' => false, 'message' => 'Validasi gagal', 'errors' => $validator->errors()], 422);
         }
 
-        $validatedData = $validator->validated();
-
-        if (Auth::guard('karyawan')->user()->nik !== $validatedData['nik']) {
-             return response()->json([
-                'success' => false,
-                'message' => 'Aksi tidak diizinkan. NIK tidak sesuai.'
-            ], 403);
+        if (Auth::guard('karyawan')->user()->nik !== $request->nik) {
+             return response()->json(['success' => false, 'message' => 'Aksi tidak diizinkan. NIK tidak sesuai.'], 403);
         }
         
-        $user = Auth::guard('karyawan')->user();
-
         try {
-            $faceVerification = $this->faceRecognitionService->verifyFaceDescriptor(
-                $validatedData['face_descriptor'],
-                $validatedData['nik']
+            // Verifikasi wajah dari gambar yang dikirim, bukan dari deskriptor
+            $faceVerification = $this->faceRecognitionService->verifyImageAgainstStored(
+                $request->face_image,
+                $request->nik
             );
 
             if (!$faceVerification['success'] || !$faceVerification['match']) {
-                $distanceMsg = isset($faceVerification['distance']) ? "Jarak: " . round($faceVerification['distance'], 4) : "";
-                $thresholdMsg = isset($faceVerification['threshold']) ? "(Batas: " . $faceVerification['threshold'] . ")" : "";
-                
                 return response()->json([
                     'success' => false,
-                    'message' => "Verifikasi wajah gagal. {$distanceMsg} {$thresholdMsg}",
-                    'distance' => $faceVerification['distance'] ?? 99
+                    'message' => $faceVerification['message'] ?? 'Verifikasi wajah gagal.',
                 ], 401);
             }
 
             $currentDate = now();
             $yearMonth = $currentDate->format('Y/m');
             
-            $fotoPath = $this->processBase64Image(
-                $validatedData['foto'],
-                "laporans/{$yearMonth}/evidence",
-                'evidence_' . $validatedData['nik'] . '_' . time()
-            );
-            
-            $faceImagePath = $this->processBase64Image(
-                $validatedData['face_image'],
-                "laporans/{$yearMonth}/verification",
-                'faceverify_' . $validatedData['nik'] . '_' . time()
-            );
+            $fotoPath = $this->processBase64Image($request->foto, "laporans/{$yearMonth}/evidence", 'evidence_' . $request->nik . '_' . time());
+            $faceImagePath = $this->processBase64Image($request->face_image, "laporans/{$yearMonth}/verification", 'faceverify_' . $request->nik . '_' . time());
 
             $laporan = new Laporan([
-                'nik' => $validatedData['nik'],
-                'tanggal' => new UTCDateTime(Carbon::parse($validatedData['tgl_laporan'])->timestamp * 1000),
-                'jam' => $validatedData['jam'],
-                'jenis_laporan' => $validatedData['jenis_laporan'],
-                'keterangan' => $validatedData['keterangan'],
-                'lokasi' => $validatedData['lokasi'],
+                'nik' => $request->nik,
+                'tanggal' => new UTCDateTime(Carbon::parse($request->tgl_laporan)->timestamp * 1000),
+                'jam' => $request->jam,
+                'jenis_laporan' => $request->jenis_laporan,
+                'keterangan' => $request->keterangan,
+                'lokasi' => $request->lokasi,
                 'foto' => $fotoPath['storage_path'], 
                 'face_verification_image' => $faceImagePath['storage_path'], 
                 'created_at' => new UTCDateTime($currentDate->timestamp * 1000),
@@ -157,12 +128,7 @@ class LaporanController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Laporan Store Error: '.$e->getMessage().' in '.$e->getFile().':'.$e->getLine(), ['trace' => $e->getTraceAsString()]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menyimpan laporan. Silakan coba lagi.',
-                'error' => config('app.debug') ? $e->getMessage() : 'Terjadi kesalahan internal.',
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Gagal menyimpan laporan. Silakan coba lagi.', 'error' => config('app.debug') ? $e->getMessage() : 'Terjadi kesalahan internal.'], 500);
         }
     }
 
