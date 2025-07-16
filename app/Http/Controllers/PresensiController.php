@@ -1,5 +1,5 @@
 <?php
-// File: C:\Users\dafii\OneDrive\Desktop\SiAmalin-EROR\SiAmalin\app\Http\Controllers\PresensiController.php
+// File: app/Http/Controllers/PresensiController.php
 
 namespace App\Http\Controllers;
 
@@ -14,7 +14,7 @@ use MongoDB\BSON\UTCDateTime;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 use App\Helpers\FaceRecognitionHelper;
-use App\Services\FaceRecognitionService; // Pastikan ini di-import
+use App\Services\FaceRecognitionService;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Hash;
 
@@ -22,59 +22,141 @@ class PresensiController extends Controller
 {
     protected $faceRecognitionService;
 
-    // PERUBAHAN: Tambahkan constructor untuk dependency injection
     public function __construct(FaceRecognitionService $faceRecognitionService)
     {
         $this->faceRecognitionService = $faceRecognitionService;
+    }
+
+    private function getJadwalAktif($nik)
+    {
+        $waktuSekarang = Carbon::now();
+        
+        // Cek jadwal kemarin untuk shift malam yang masih berlanjut
+        $jadwalKemarin = JadwalShift::where('karyawan_nik', $nik)
+                                    ->where('tanggal', new UTCDateTime($waktuSekarang->copy()->subDay()->startOfDay()->timestamp * 1000))
+                                    ->first();
+
+        if ($jadwalKemarin && $jadwalKemarin->jam_mulai && $jadwalKemarin->jam_selesai) {
+            $jamMulaiKemarin = Carbon::parse($jadwalKemarin->tanggal->format('Y-m-d') . ' ' . $jadwalKemarin->jam_mulai);
+            $jamSelesaiKemarin = Carbon::parse($jadwalKemarin->tanggal->format('Y-m-d') . ' ' . $jadwalKemarin->jam_selesai);
+            
+            // Jika jam selesai lebih kecil dari jam mulai, berarti shift melewati tengah malam
+            if ($jamSelesaiKemarin->lt($jamMulaiKemarin)) {
+                $jamSelesaiKemarin->addDay();
+                // Jika waktu sekarang masih dalam rentang shift kemarin, return jadwal kemarin
+                if ($waktuSekarang->lt($jamSelesaiKemarin)) {
+                    return $jadwalKemarin;
+                }
+            }
+        }
+
+        // Jika tidak ada shift kemarin yang masih aktif, cek jadwal hari ini
+        $jadwalHariIni = JadwalShift::where('karyawan_nik', $nik)
+                                    ->where('tanggal', new UTCDateTime($waktuSekarang->copy()->startOfDay()->timestamp * 1000))
+                                    ->first();
+        
+        return $jadwalHariIni;
     }
 
     public function create()
     {
         $user = Auth::guard('karyawan')->user();
         $pesanJadwal = null; 
-
-        // ================== TAMBAHAN BARU ==================
         $faceDescriptor = null;
-        // Periksa apakah pengguna memiliki data wajah yang tersimpan
+        $waktuSekarang = Carbon::now();
+
         if ($user && !empty($user->face_embedding['embedding'])) {
-            // Encode descriptor ke format JSON agar bisa dibaca JavaScript
             $faceDescriptor = json_encode($user->face_embedding['embedding']);
         }
-        // =====================================================
+
+        // PERBAIKAN: Cari presensi aktif dengan rentang waktu yang lebih luas (48 jam)
+        // untuk menangani shift malam yang bisa berlangsung lintas hari
+        $presensiAktif = Presensi::where('nik', $user->nik)
+                        ->whereNotNull('jam_in')
+                        ->whereNull('jam_out')
+                        ->where('tgl_presensi', '>=', new UTCDateTime($waktuSekarang->copy()->subHours(48)->timestamp * 1000))
+                        ->orderBy('tgl_presensi', 'desc')
+                        ->first();
+        
+        // Jika tidak ada presensi aktif, cek apakah ada jadwal yang sudah selesai hari ini
+        if (!$presensiAktif) {
+            $jadwalHariIni = $this->getJadwalAktif($user->nik);
+            if ($jadwalHariIni) {
+                $tanggalJadwalUTC = new UTCDateTime($jadwalHariIni->tanggal->copy()->startOfDay()->timestamp * 1000);
+                $presensiSelesaiHariIni = Presensi::where('nik', $user->nik)
+                    ->where('tgl_presensi', $tanggalJadwalUTC)
+                    ->whereNotNull('jam_out')
+                    ->first();
+                
+                if ($presensiSelesaiHariIni) {
+                    $presensiAktif = $presensiSelesaiHariIni;
+                }
+            }
+        }
 
         if ($user->jabatan === 'Petugas Keamanan') {
             if (empty($user->office_location)) {
                 session()->flash('error_presensi_create', 'Lokasi kantor Anda belum ditentukan. Harap hubungi Komandan atau Admin.');
             }
-            $hariini = Carbon::today();
-            $jadwalHariIni = JadwalShift::where('karyawan_nik', $user->nik)
-                                        ->where('tanggal', new UTCDateTime($hariini->copy()->startOfDay()->timestamp * 1000))
-                                        ->first();
-            if (!$jadwalHariIni) {
-                $pesanJadwal = "Anda tidak memiliki jadwal shift untuk hari ini. Presensi tidak dapat dilakukan.";
-            } elseif (strtoupper($jadwalHariIni->shift_nama) === 'LIBUR') {
-                $pesanJadwal = "Anda dijadwalkan LIBUR hari ini. Presensi tidak dapat dilakukan.";
+            
+            if (!$presensiAktif || !$presensiAktif->jam_out) {
+                // PERBAIKAN: Tentukan jadwal yang tepat untuk validasi
+                if ($presensiAktif) {
+                    // Jika ada presensi aktif, gunakan jadwal dari tanggal presensi tersebut
+                    $jadwalUntukValidasi = JadwalShift::where('karyawan_nik', $user->nik)
+                        ->where('tanggal', $presensiAktif->tgl_presensi)
+                        ->first();
+                } else {
+                    // Jika tidak ada presensi aktif, cari jadwal yang sedang berlaku
+                    $jadwalUntukValidasi = $this->getJadwalAktif($user->nik);
+                }
+
+                if (!$jadwalUntukValidasi) {
+                    if (!$presensiAktif) {
+                        $pesanJadwal = "Anda tidak memiliki jadwal shift aktif saat ini. Presensi tidak dapat dilakukan.";
+                    }
+                } elseif (strtoupper($jadwalUntukValidasi->shift_nama) === 'LIBUR') {
+                    if (!$presensiAktif) {
+                        $pesanJadwal = "Anda dijadwalkan LIBUR hari ini. Presensi tidak dapat dilakukan.";
+                    }
+                } else {
+                    $tanggalJadwal = Carbon::parse($jadwalUntukValidasi->tanggal);
+                    $jamMulai = Carbon::parse($tanggalJadwal->format('Y-m-d') . ' ' . $jadwalUntukValidasi->jam_mulai);
+                    $jamSelesai = Carbon::parse($tanggalJadwal->format('Y-m-d') . ' ' . $jadwalUntukValidasi->jam_selesai);
+
+                    // Handle shift malam (jam selesai < jam mulai)
+                    if ($jamSelesai->lt($jamMulai)) {
+                        $jamSelesai->addDay();
+                    }
+
+                    if ($presensiAktif) {
+                        // Jika sudah ada presensi aktif, berarti ini untuk absen pulang
+                        if ($waktuSekarang->lt($jamSelesai)) {
+                            $pesanJadwal = "Anda baru dapat melakukan absen pulang setelah shift berakhir pada pukul " . $jamSelesai->format('H:i') . ".";
+                        }
+                    } else { 
+                        // Jika belum ada presensi aktif, ini untuk absen masuk
+                        // PERBAIKAN: Untuk shift malam, izinkan absen masuk dari jam mulai hingga jam selesai (lintas hari)
+                        $sekarangDalamShift = $waktuSekarang->between($jamMulai, $jamSelesai);
+                        
+                        if (!$sekarangDalamShift) {
+                            $pesanJadwal = "Absen masuk hanya bisa dilakukan selama jam shift Anda ({$jamMulai->format('H:i')} - {$jamSelesai->format('H:i')}).";
+                        }
+                    }
+                }
+            } else {
+                $pesanJadwal = "Anda sudah menyelesaikan presensi untuk shift ini.";
             }
         }
-        
-        $hariini = Carbon::today();
-        $tgl_presensi_start = new UTCDateTime($hariini->copy()->startOfDay()->timestamp * 1000);
-        $tgl_presensi_end = new UTCDateTime($hariini->copy()->endOfDay()->timestamp * 1000);
 
-        $cek = Presensi::where('nik', $user->nik)
-                        ->whereBetween('tgl_presensi', [$tgl_presensi_start, $tgl_presensi_end])
-                        ->first();
-
-        // PERUBAHAN: Kirim variabel $faceDescriptor ke view
-        return view('presensi.create', compact('cek', 'user', 'pesanJadwal', 'faceDescriptor'));
+        return view('presensi.create', compact('presensiAktif', 'user', 'pesanJadwal', 'faceDescriptor'));
     }
 
     public function store(Request $request)
     {
-        // Validasi sekarang tidak memerlukan face_descriptor
         $validator = Validator::make($request->all(), [
             'lokasi' => 'required|string',
-            'image' => 'required|string', // Ini adalah gambar base64
+            'image' => 'required|string',
             'nik' => 'required|string|exists:karyawans,nik',
         ]);
 
@@ -83,27 +165,64 @@ class PresensiController extends Controller
         }
 
         $user = Karyawan::where('nik', $request->nik)->firstOrFail();
+        $waktuSekarang = Carbon::now();
+        
+        // PERBAIKAN: Cari presensi aktif dengan rentang waktu yang lebih luas (48 jam)
+        $presensiAktif = Presensi::where('nik', $user->nik)
+            ->whereNotNull('jam_in')
+            ->whereNull('jam_out')
+            ->where('tgl_presensi', '>=', new UTCDateTime($waktuSekarang->copy()->subHours(48)->timestamp * 1000))
+            ->orderBy('tgl_presensi', 'desc')
+            ->first();
+        
+        $isClockOutAction = !is_null($presensiAktif);
+        
+        // PERBAIKAN: Tentukan jadwal yang tepat untuk validasi
+        if ($isClockOutAction) {
+            // Jika ada presensi aktif, gunakan jadwal dari tanggal presensi tersebut
+            $jadwalUntukValidasi = JadwalShift::where('karyawan_nik', $user->nik)
+                ->where('tanggal', $presensiAktif->tgl_presensi)
+                ->first();
+        } else {
+            // Jika tidak ada presensi aktif, cari jadwal yang sedang berlaku
+            $jadwalUntukValidasi = $this->getJadwalAktif($user->nik);
+        }
 
-        // Verifikasi dilakukan di backend
         if ($user->jabatan === 'Petugas Keamanan') {
-            if (empty($user->face_embedding)) {
-                return response()->json(['error' => 'Data wajah Anda belum terdaftar.'], 403);
+            if (!$jadwalUntukValidasi) {
+                return response()->json(['error' => 'Presensi ditolak. Jadwal shift Anda tidak ditemukan.'], 403);
+            }
+            if (strtoupper($jadwalUntukValidasi->shift_nama) === 'LIBUR') {
+                return response()->json(['error' => 'Presensi ditolak. Anda dijadwalkan LIBUR.'], 403);
             }
 
-            // Memanggil service yang aman
-            $faceVerification = $this->faceRecognitionService->verifyImageAgainstStored(
-                $request->image,
-                $user->nik
-            );
+            $tanggalJadwal = Carbon::parse($jadwalUntukValidasi->tanggal);
+            $jamMulai = Carbon::parse($tanggalJadwal->format('Y-m-d') . ' ' . $jadwalUntukValidasi->jam_mulai);
+            $jamSelesai = Carbon::parse($tanggalJadwal->format('Y-m-d') . ' ' . $jadwalUntukValidasi->jam_selesai);
 
-            if (!$faceVerification['success'] || !$faceVerification['match']) {
-                $errorMessage = $faceVerification['message'] ?? 'Verifikasi wajah gagal.';
-                return response()->json(['error' => $errorMessage], 401);
+            // Handle shift malam
+            if ($jamSelesai->lt($jamMulai)) {
+                $jamSelesai->addDay();
             }
-            // =======================================================
-            
+
+            if ($isClockOutAction) {
+                // Validasi waktu absen pulang - harus setelah jam selesai shift
+                if ($waktuSekarang->lt($jamSelesai)) {
+                    return response()->json(['error' => "Absen pulang hanya bisa dilakukan setelah shift berakhir pada pukul {$jamSelesai->format('H:i')}."], 403);
+                }
+            } else {
+                // Validasi waktu absen masuk - harus dalam rentang shift
+                $sekarangDalamShift = $waktuSekarang->between($jamMulai, $jamSelesai);
+                
+                if (!$sekarangDalamShift) {
+                    return response()->json(['error' => "Absen masuk hanya bisa dilakukan selama jam shift Anda ({$jamMulai->format('H:i')} - {$jamSelesai->format('H:i')})."], 403);
+                }
+            }
+        }
+
+        if ($user->jabatan === 'Petugas Keamanan') {
             if (empty($user->office_location)) {
-                 return response()->json(['error' => 'Lokasi kantor Anda belum ditentukan.'], 400);
+                return response()->json(['error' => 'Lokasi kantor Anda belum ditentukan.'], 400);
             }
             $lokasiuser = explode(",", $request->lokasi);
             if (count($lokasiuser) < 2 || !is_numeric($lokasiuser[0]) || !is_numeric($lokasiuser[1])) {
@@ -115,29 +234,16 @@ class PresensiController extends Controller
             }
         }
         
-        $hariini = Carbon::today();
-        $jam_sekarang_str = date("H:i:s");
+        $jam_sekarang_str = $waktuSekarang->format("H:i:s");
         
-        $startOfDay = $hariini->copy()->startOfDay();
-        $endOfDay = $hariini->copy()->endOfDay();
-        
-        Log::info("Mencari presensi untuk NIK: {$user->nik} pada tanggal: {$hariini->toDateString()}");
-        
-        $presensiHariIni = Presensi::where('nik', $user->nik)
-            ->whereBetween('tgl_presensi', [new UTCDateTime($startOfDay->timestamp * 1000), new UTCDateTime($endOfDay->timestamp * 1000)])
-            ->first();
-
-        if ($presensiHariIni && !empty($presensiHariIni->jam_out) && $presensiHariIni->jam_out !== '00:00:00') {
-             Log::warning("Presensi hari ini sudah lengkap untuk NIK: {$user->nik}");
-             return response()->json(['error' => 'Anda sudah melakukan presensi masuk dan pulang hari ini.'], 400);
+        if ($isClockOutAction && !empty($presensiAktif->jam_out) && $presensiAktif->jam_out !== '00:00:00') {
+             return response()->json(['error' => 'Anda sudah melakukan presensi masuk dan pulang untuk shift ini.'], 400);
         }
 
-        $isClockOut = $presensiHariIni && !empty($presensiHariIni->jam_in);
-        $actionType = $isClockOut ? "out" : "in";
-        Log::info("Aksi presensi terdeteksi: {$actionType} untuk NIK {$user->nik}");
-
+        $tanggalFile = $isClockOutAction ? Carbon::parse($presensiAktif->tgl_presensi)->format('Y-m-d') : Carbon::parse($jadwalUntukValidasi->tanggal)->format('Y-m-d');
+        $actionType = $isClockOutAction ? "out" : "in";
+        $fileName = "{$user->nik}-{$tanggalFile}-{$actionType}.png";
         $folderPath = "uploads/absensi/";
-        $fileName = "{$user->nik}-{$hariini->format('Y-m-d')}-{$actionType}.png";
         $fullPath = $folderPath . $fileName;
 
         $image_parts = explode(";base64,", $request->image);
@@ -148,23 +254,28 @@ class PresensiController extends Controller
             Storage::disk('public')->put($fullPath, $image_base64);
             $savedPath = $fullPath;
 
-            if ($isClockOut) {
-                Log::info("Melakukan update presensi pulang untuk NIK: {$user->nik}");
-                $presensiHariIni->update([
+            if ($isClockOutAction) {
+                $presensiAktif->update([
                     "jam_out" => $jam_sekarang_str,
                     "foto_out" => $savedPath,
                     "lokasi_out" => $request->lokasi
                 ]);
                 return response()->json(['success' => 'Terimakasih, hati-hati di jalan!', 'status' => 'out', 'redirect_url' => url('/dashboard')]);
             } else {
-                Log::info("Membuat data presensi masuk baru untuk NIK: {$user->nik}");
-                Presensi::create([
-                    'nik' => $user->nik,
-                    'tgl_presensi' => new UTCDateTime($startOfDay->timestamp * 1000),
-                    'jam_in' => $jam_sekarang_str,
-                    'foto_in' => $savedPath,
-                    'lokasi_in' => $request->lokasi
-                ]);
+                Presensi::updateOrCreate(
+                    [
+                        'nik' => $user->nik,
+                        'tgl_presensi' => new UTCDateTime(Carbon::parse($jadwalUntukValidasi->tanggal)->startOfDay()->timestamp * 1000)
+                    ],
+                    [
+                        'jam_in' => $jam_sekarang_str,
+                        'foto_in' => $savedPath,
+                        'lokasi_in' => $request->lokasi,
+                        'jam_out' => null,
+                        'foto_out' => null,
+                        'lokasi_out' => null
+                    ]
+                );
                 return response()->json(['success' => 'Terimakasih, selamat bekerja!', 'status' => 'in', 'redirect_url' => url('/dashboard')]);
             }
         } catch (\Exception $e) {

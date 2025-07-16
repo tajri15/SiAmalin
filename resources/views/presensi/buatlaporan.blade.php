@@ -1,3 +1,4 @@
+{{-- resources\views\presensi\buatlaporan.blade.php --}}
 @extends('layouts.presensi')
 
 @section('header')
@@ -46,7 +47,7 @@
                 <div class="card-body" style="padding: 20px;">
                     <h5 style="font-weight: 600; color: #343a40; margin-bottom: 15px;">
                         <ion-icon name="camera-outline" style="vertical-align: middle; margin-right: 5px;"></ion-icon>
-                        Langkah 2: Ambil Foto Bukti
+                        Langkah 2: Ambil Foto Bukti <span class="required-asterisk">*</span>
                     </h5>
 
                     <div class="camera-container mb-3" style="display: none; position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #000;">
@@ -87,19 +88,19 @@
                         Langkah 3: Isi Detail Laporan
                     </h5>
                     <div class="form-group mb-3">
-                        <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Tanggal Laporan</label>
+                        <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Tanggal Laporan <span class="required-asterisk">*</span></label>
                         <input type="date" name="tgl_laporan" id="tgl_laporan" class="form-control" style="border-radius: 10px; height: 45px; border: 1px solid #e0e0e0; padding: 0 15px;" required>
                     </div>
 
                     <div class="form-group mb-3">
-                        <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Jam Laporan</label>
+                        <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Jam Laporan <span class="required-asterisk">*</span></label>
                         <input type="time" name="jam" id="jam_laporan" class="form-control" style="border-radius: 10px; height: 45px; border: 1px solid #e0e0e0; padding: 0 15px;" required>
                     </div>
 
                     <div class="form-group mb-3">
-                        <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Jenis Laporan</label>
+                        <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Jenis Laporan <span class="required-asterisk">*</span></label>
                         <select name="jenis_laporan" class="form-control" style="border-radius: 10px; height: 45px; border: 1px solid #e0e0e0; padding: 0 15px;" required>
-                            <option value="">Pilih Jenis Laporan</option>
+                            <option value="">-- Pilih Jenis Laporan --</option>
                             <option value="harian">Harian</option>
                             <option value="kegiatan">Kegiatan</option>
                             <option value="masalah">Masalah</option>
@@ -107,12 +108,12 @@
                     </div>
 
                     <div class="form-group mb-3">
-                        <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Keterangan</label>
+                        <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Keterangan <span class="required-asterisk">*</span></label>
                         <textarea name="keterangan" class="form-control" rows="3" style="border-radius: 10px; border: 1px solid #e0e0e0; padding: 10px 15px;" required></textarea>
                     </div>
 
                     <div class="form-group mb-3">
-                        <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Lokasi</label>
+                        <label style="font-size: 14px; color: #6c757d; margin-bottom: 5px; display: block;">Lokasi <span class="required-asterisk">*</span></label>
                         <input type="text" name="lokasi" id="lokasi" class="form-control" style="border-radius: 10px; height: 45px; border: 1px solid #e0e0e0; padding: 0 15px;" required>
                         <small class="text-muted" id="locationHelp">Koordinat: <span id="coordinatesDisplay">Belum tersedia</span></small>
                     </div>
@@ -130,6 +131,14 @@
 @push('myscript')
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    /* Styling for the red asterisk */
+    .required-asterisk {
+        color: red;
+        margin-left: 2px; /* Small space between label and asterisk */
+        font-weight: bold;
+    }
+</style>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         // Hanya jalankan skrip jika data penting dari controller tersedia

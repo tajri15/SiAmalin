@@ -55,7 +55,7 @@
 
     <div class="card shadow mb-4">
         <div class="card-header py-3">
-            <h6 class="m-0 font-weight-bold text-primary">Data Presensi Tanggal: {{ \Carbon\Carbon::parse($tanggal ?? date('Y-m-d'))->isoFormat('dddd, D MMMM<x_bin_534>') }}</h6>
+            <h6 class="m-0 font-weight-bold text-primary">Data Presensi Tanggal: {{ \Carbon\Carbon::parse($tanggal ?? date('Y-m-d'))->isoFormat('dddd, D MMMM YYYY') }}</h6>
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -63,7 +63,7 @@
                     <thead>
                         <tr class="text-center">
                             <th>No</th>
-                            <th>NIK</th>
+                            <th>Username</th>
                             <th>Nama Karyawan</th>
                             <th>Jabatan</th>
                             <th>Jam Masuk</th>
@@ -72,7 +72,7 @@
                             <th>Jam Pulang</th>
                             <th>Foto Pulang</th>
                             <th>Lokasi Pulang</th>
-                            <th>Aksi</th>
+
                         </tr>
                     </thead>
                     <tbody>
@@ -113,11 +113,7 @@
                                 @endif
                             </td>
                             <td><small>{{ $data->lokasi_out ?? '-' }}</small></td>
-                            <td class="text-center">
-                                <a href="{{ route('admin.presensi.edit', $data->_id) }}" class="btn btn-warning btn-sm py-0 px-1" data-bs-toggle="tooltip" title="Edit Presensi">
-                                    <i class="bi bi-pencil-square"></i>
-                                </a>
-                            </td>
+
                         </tr>
                         @empty
                         <tr>

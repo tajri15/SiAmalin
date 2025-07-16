@@ -175,7 +175,7 @@
                     @csrf
 
                     <div class="mb-3 input-icon-wrapper">
-                        <input type="text" name="nik" id="nik" class="form-control" placeholder="NIK" required value="{{ old('nik') }}">
+                        <input type="text" name="nik" id="nik" class="form-control" placeholder="Username" required value="{{ old('nik') }}">
                         <i class="bi bi-x-circle input-icon" onclick="clearField('nik')" style="right: 1rem; display: {{ old('nik') ? 'block' : 'none' }};" id="clearNikIcon"></i>
                     </div>
 

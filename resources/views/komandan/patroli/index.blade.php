@@ -16,16 +16,22 @@
     .action-buttons .btn {
         margin-right: 0.25rem;
     }
-    /* Styling untuk pesan sukses/error di atas halaman */
     .fixed-alert {
         position: fixed;
-        top: 70px; /* Sesuaikan dengan tinggi navbar + sedikit margin */
+        top: 70px;
         left: 50%;
         transform: translateX(-50%);
-        z-index: 1050; /* Pastikan di atas konten lain */
+        z-index: 1050;
         min-width: 300px;
-        max-width: 600px; /* Atau sesuaikan dengan preferensi Anda */
+        max-width: 600px;
         box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
+    }
+    /* PERBAIKAN: CSS untuk mengatur ulang layout paginasi */
+    .pagination-container nav > div {
+        display: flex;
+        flex-direction: column-reverse; /* Membalik urutan: link di atas, teks di bawah */
+        align-items: center;
+        gap: 0.5rem; /* Memberi jarak antara link dan teks */
     }
 </style>
 @endpush
@@ -37,7 +43,6 @@
     </div>
     <p class="mb-4">Menampilkan histori patroli petugas keamanan di {{ $fakultasKomandan }}.</p>
 
-    {{-- Pesan Sukses/Error Global untuk Halaman Ini --}}
     @if(session('success'))
         <div class="alert alert-success alert-dismissible fade show fixed-alert" role="alert" id="pageSuccessMessage">
             {{ session('success') }}
@@ -60,8 +65,8 @@
             <form method="GET" action="{{ route('komandan.patroli.index') }}">
                 <div class="row gx-2 gy-2 align-items-end">
                     <div class="col-md-3">
-                        <label for="nik_karyawan" class="form-label mb-1 small">NIK Petugas:</label>
-                        <input type="text" name="nik_karyawan" id="nik_karyawan" class="form-control form-control-sm" value="{{ request('nik_karyawan') }}" placeholder="Masukkan NIK">
+                        <label for="nik_karyawan" class="form-label mb-1 small">Username Petugas:</label>
+                        <input type="text" name="nik_karyawan" id="nik_karyawan" class="form-control form-control-sm" value="{{ request('nik_karyawan') }}" placeholder="Masukkan Username">
                     </div>
                     <div class="col-md-3">
                         <label for="nama_karyawan" class="form-label mb-1 small">Nama Petugas:</label>
@@ -96,7 +101,7 @@
                     <thead>
                         <tr class="text-center">
                             <th>No</th>
-                            <th>Petugas (NIK)</th>
+                            <th>Petugas (Username)</th>
                             <th>Waktu Mulai</th>
                             <th>Waktu Selesai</th>
                             <th>Durasi</th>
@@ -145,9 +150,13 @@
                     </tbody>
                 </table>
             </div>
-            <div class="mt-3 d-flex justify-content-center">
+            {{-- PERBAIKAN TAMPILAN PAGINASI --}}
+            @if ($patrols->hasPages())
+            <div class="pagination-container mt-3">
                 {{ $patrols->appends(request()->query())->links() }}
             </div>
+            @endif
+            {{-- AKHIR PERBAIKAN --}}
         </div>
     </div>
 </div>

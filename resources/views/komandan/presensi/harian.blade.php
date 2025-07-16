@@ -48,7 +48,7 @@
                     <thead>
                         <tr class="text-center">
                             <th>No</th>
-                            <th>NIK</th>
+                            <th>Username</th>
                             <th>Nama Petugas</th>
                             <th>Jabatan</th>
                             <th>Jam Masuk</th>
@@ -57,7 +57,7 @@
                             <th>Jam Pulang</th>
                             <th>Foto Pulang</th>
                             <th>Lokasi Pulang</th>
-                            <th>Aksi</th>
+
                         </tr>
                     </thead>
                     <tbody>
@@ -91,11 +91,7 @@
                                 @else - @endif
                             </td>
                             <td><small>{{ $data->lokasi_out ?? '-' }}</small></td>
-                            <td class="text-center">
-                                <a href="{{ route('komandan.presensi.edit', $data->_id) }}" class="btn btn-warning btn-sm py-0 px-1" data-bs-toggle="tooltip" title="Edit Presensi">
-                                    <i class="bi bi-pencil-square"></i>
-                                </a>
-                            </td>
+
                         </tr>
                         @empty
                         <tr>

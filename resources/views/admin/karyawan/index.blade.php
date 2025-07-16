@@ -1,3 +1,5 @@
+{{-- resources/views/admin/karyawan/index.blade.php --}}
+
 @extends('admin.layouts.app')
 
 @section('title', 'Manajemen Karyawan')
@@ -62,7 +64,7 @@
                             <th>No</th>
                             <th>
                                 <a href="{{ route('admin.karyawan.index', ['sort_by' => 'nik', 'sort_order' => $sortBy == 'nik' && $sortOrder == 'asc' ? 'desc' : 'asc'] + request()->except(['sort_by', 'sort_order'])) }}" class="sortable-link" data-bs-toggle="tooltip" title="Urutkan berdasarkan NIK">
-                                    NIK
+                                    Username
                                     @if($sortBy == 'nik')
                                         <i class="bi bi-sort-numeric-{{ $sortOrder == 'asc' ? 'down' : 'up-alt' }}"></i>
                                     @else

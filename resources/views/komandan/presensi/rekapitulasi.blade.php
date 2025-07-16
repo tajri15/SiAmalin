@@ -1,4 +1,4 @@
-@extends('admin.layouts.app') {{-- Menggunakan layout admin --}}
+@extends('admin.layouts.app')
 
 @section('title', 'Rekapitulasi Presensi - Fakultas ' . $fakultasKomandan)
 
@@ -52,8 +52,8 @@
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label for="nik" class="form-label mb-1 small">NIK Petugas:</label>
-                        <input type="text" name="nik" id="nik" class="form-control form-control-sm" value="{{ $searchNik ?? '' }}" placeholder="Masukkan NIK">
+                        <label for="nik" class="form-label mb-1 small">Username Petugas:</label>
+                        <input type="text" name="nik" id="nik" class="form-control form-control-sm" value="{{ $searchNik ?? '' }}" placeholder="Masukkan Username">
                     </div>
                      <div class="col-md-3">
                         <label for="nama" class="form-label mb-1 small">Nama Petugas:</label>
@@ -74,7 +74,7 @@
 
     <div class="card shadow mb-4">
         <div class="card-header py-3">
-            <h6 class="m-0 font-weight-bold text-primary">Data Presensi ({{ $namaBulan[(int)$bulanIni] }} {{ $tahunIni }}) - Fakultas {{ $fakultasKomandan }}</h6>
+            <h6 class="m-0 font-weight-bold text-primary">Data Presensi ({{ $namaBulan[(int)$bulanIni] }} {{ $tahunIni }}) - {{ $fakultasKomandan }}</h6>
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -83,7 +83,7 @@
                         <tr class="text-center">
                             <th>No</th>
                             <th>Tanggal</th>
-                            <th>NIK</th>
+                            <th>Username</th>
                             <th>Nama Petugas</th>
                             <th>Jam Masuk</th>
                             <th>Foto Masuk</th>
@@ -108,7 +108,9 @@
                             </td>
                             <td class="text-center">{{ $data->jam_in ?? '-' }}</td>
                             <td class="text-center">
-                                @if($data->foto_in)
+                                @if($data->foto_in == 'admin')
+                                    <span class="badge bg-info">Admin</span>
+                                @elseif($data->foto_in)
                                 <a href="{{ asset('storage/' . $data->foto_in) }}" data-bs-toggle="tooltip" title="Lihat Foto Masuk" target="_blank">
                                     <img src="{{ asset('storage/' . $data->foto_in) }}" alt="Masuk" class="img-thumbnail-xs">
                                 </a>
@@ -116,7 +118,9 @@
                             </td>
                             <td class="text-center">{{ $data->jam_out ?? '-' }}</td>
                             <td class="text-center">
-                                @if($data->foto_out)
+                                @if($data->foto_out == 'admin')
+                                    <span class="badge bg-info">Admin</span>
+                                @elseif($data->foto_out)
                                 <a href="{{ asset('storage/' . $data->foto_out) }}" data-bs-toggle="tooltip" title="Lihat Foto Pulang" target="_blank">
                                     <img src="{{ asset('storage/' . $data->foto_out) }}" alt="Pulang" class="img-thumbnail-xs">
                                 </a>

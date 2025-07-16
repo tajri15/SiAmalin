@@ -1,5 +1,5 @@
 <?php
-
+//app\Http\Controllers\Admin\AdminLaporanController.php
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
@@ -8,6 +8,8 @@ use App\Models\Laporan;
 use App\Models\Karyawan;
 use Carbon\Carbon;
 use MongoDB\BSON\UTCDateTime;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class AdminLaporanController extends Controller
 {
@@ -36,14 +38,23 @@ class AdminLaporanController extends Controller
 
         // Filter berdasarkan NIK Karyawan
         if ($request->filled('nik_karyawan')) {
-            $query->where('nik', $request->nik_karyawan);
+            $query->where('nik', 'like', '%' . $request->nik_karyawan . '%');
         }
         
-        // Filter berdasarkan Nama Karyawan
+        // Filter berdasarkan Nama Karyawan secara case-insensitive
         if ($request->filled('nama_karyawan')) {
-            $query->whereHas('karyawan', function ($q) use ($request) {
-                $q->where('nama_lengkap', 'like', '%' . $request->nama_karyawan . '%');
-            });
+            // Pertama, cari NIK dari karyawan yang namanya cocok
+            $niksFromName = Karyawan::where('nama_lengkap', 'regexp', "/.*{$request->nama_karyawan}.*/i")
+                                      ->pluck('nik')
+                                      ->toArray();
+
+            // Jika tidak ada karyawan yang ditemukan, pastikan query tidak mengembalikan hasil
+            if (empty($niksFromName)) {
+                $query->whereRaw(fn($q) => $q->where('_id', '=', '0'));
+            } else {
+                // Filter laporan berdasarkan NIK yang ditemukan
+                $query->whereIn('nik', $niksFromName);
+            }
         }
 
         // Filter berdasarkan Jenis Laporan
@@ -51,7 +62,7 @@ class AdminLaporanController extends Controller
             $query->where('jenis_laporan', $request->jenis_laporan);
         }
 
-        // Filter berdasarkan Status Admin (jika ada field status_admin)
+        // Filter berdasarkan Status Admin
         if ($request->filled('status_admin')) {
             if ($request->status_admin == 'belum_ditinjau') {
                 $query->whereNull('status_admin');
@@ -77,24 +88,79 @@ class AdminLaporanController extends Controller
 
     /**
      * Memperbarui status laporan oleh admin.
-     * Anda perlu menambahkan field 'status_admin' dan 'catatan_admin' (opsional) pada model Laporan.
      */
     public function updateStatus(Request $request, $id)
     {
         $request->validate([
-            'status_admin' => 'required|string|in:Diterima,Ditolak', // Sesuaikan status
+            'status_admin' => 'required|string|in:Diterima,Ditolak',
             'catatan_admin' => 'nullable|string|max:1000',
         ]);
 
         $laporan = Laporan::findOrFail($id);
         $laporan->status_admin = $request->status_admin;
-        $laporan->catatan_admin = $request->catatan_admin; // Pastikan field ini ada di model Laporan
-        $laporan->admin_peninjau_id = auth()->guard('karyawan')->id(); // Simpan ID admin yang meninjau
+        $laporan->catatan_admin = $request->catatan_admin;
+        $laporan->admin_peninjau_id = auth()->guard('karyawan')->id();
         $laporan->tanggal_peninjauan_admin = new UTCDateTime(now()->timestamp * 1000);
         $laporan->save();
 
-        // Kirim notifikasi ke karyawan jika perlu
-
         return redirect()->route('admin.laporan.show', $id)->with('success', 'Status laporan berhasil diperbarui.');
+    }
+
+    /**
+     * NEW: Menghapus laporan dan file-file terkait.
+     *
+     * @param  string  $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function destroy($id)
+    {
+        try {
+            $laporan = Laporan::findOrFail($id);
+            
+            // Hapus file foto utama jika ada
+            if ($laporan->foto) {
+                $this->deleteFileIfExists($laporan->foto);
+            }
+            
+            // Hapus file foto verifikasi wajah jika ada
+            if ($laporan->face_verification_image) {
+                $this->deleteFileIfExists($laporan->face_verification_image);
+            }
+            
+            // Hapus data laporan dari database
+            $laporan->delete();
+            
+            Log::info('Laporan berhasil dihapus', [
+                'laporan_id' => $id,
+                'nik' => $laporan->nik,
+                'admin_id' => auth()->guard('karyawan')->id()
+            ]);
+            
+            return redirect()->route('admin.laporan.index')
+                           ->with('success', 'Laporan berhasil dihapus beserta file-file terkait.');
+                           
+        } catch (\Exception $e) {
+            Log::error('Error menghapus laporan: ' . $e->getMessage(), [
+                'laporan_id' => $id,
+                'admin_id' => auth()->guard('karyawan')->id()
+            ]);
+            
+            return redirect()->route('admin.laporan.index')
+                           ->with('error', 'Gagal menghapus laporan: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Helper method untuk menghapus file dari storage
+     *
+     * @param  string  $filePath
+     * @return void
+     */
+    private function deleteFileIfExists($filePath)
+    {
+        if ($filePath && Storage::disk('public')->exists($filePath)) {
+            Storage::disk('public')->delete($filePath);
+            Log::info('File berhasil dihapus: ' . $filePath);
+        }
     }
 }

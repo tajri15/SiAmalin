@@ -40,7 +40,7 @@
                     <thead>
                         <tr class="text-center">
                             <th>No</th>
-                            <th>NIK</th>
+                            <th>Username</th>
                             <th>Nama Lengkap</th>
                             <th>Jabatan</th>
                             <th>No. HP</th>

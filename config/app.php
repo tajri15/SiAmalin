@@ -4,116 +4,117 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
-    'env' => env('APP_ENV', 'production'),
+        'env' => env('APP_ENV', 'production'),
 
-    'debug' => (bool) env('APP_DEBUG', false),
+            'debug' => (bool) env('APP_DEBUG', false),
 
-    'url' => env('APP_URL', 'http://localhost'),
+                'url' => env('APP_URL', 'http://localhost'),
 
-    'timezone' => 'Asia/Jakarta',
+                    'timezone' => 'Asia/Jakarta',
 
-    'locale' => env('APP_LOCALE', 'id'),
+                        'locale' => env('APP_LOCALE', 'id'),
 
-    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
+                            'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 
-    'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
+                                'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
 
-    'cipher' => 'AES-256-CBC',
+                                    'cipher' => 'AES-256-CBC',
 
-    'key' => env('APP_KEY'),
+                                        'key' => env('APP_KEY'),
 
-    'previous_keys' => [
-        ...array_filter(
-            explode(',', env('APP_PREVIOUS_KEYS', ''))
-        ),
-    ],
+                                            'previous_keys' => [
+                                                    ...array_filter(
+                                                                explode(',', env('APP_PREVIOUS_KEYS', ''))
+                                                                        ),
+                                                                            ],
 
-    'maintenance' => [
-        'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
-        'store' => env('APP_MAINTENANCE_STORE', 'database'),
-    ],
+                                                                                'maintenance' => [
+                                                                                        'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
+                                                                                                'store' => env('APP_MAINTENANCE_STORE', 'database'),
+                                                                                                    ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Application Service Providers
-    |--------------------------------------------------------------------------
-    |
-    | Berikut adalah daftar service providers yang digunakan oleh aplikasi.
-    | Pastikan Jenssegers\Mongodb sudah terdaftar agar bisa menggunakan MongoDB.
-    |
-    */
+                                                                                                        /*
+                                                                                                            |--------------------------------------------------------------------------
+                                                                                                                | Application Service Providers
+                                                                                                                    |--------------------------------------------------------------------------
+                                                                                                                        |
+                                                                                                                            | Berikut adalah daftar service providers yang digunakan oleh aplikasi.
+                                                                                                                                | Pastikan Jenssegers\Mongodb sudah terdaftar agar bisa menggunakan MongoDB.
+                                                                                                                                    |
+                                                                                                                                        */
 
-    'providers' => [
+                                                                                                                                            'providers' => [
 
-        /*
-         * Laravel Framework Service Providers...
-         */
-        Illuminate\Auth\AuthServiceProvider::class,
-        Illuminate\Broadcasting\BroadcastServiceProvider::class,
-        Illuminate\Bus\BusServiceProvider::class,
-        Illuminate\Cache\CacheServiceProvider::class,
-        Illuminate\Foundation\Providers\ConsoleSupportServiceProvider::class,
-        Illuminate\Cookie\CookieServiceProvider::class,
-        Illuminate\Database\DatabaseServiceProvider::class,
-        Illuminate\Encryption\EncryptionServiceProvider::class,
-        Illuminate\Filesystem\FilesystemServiceProvider::class,
-        Illuminate\Foundation\Providers\FoundationServiceProvider::class,
-        Illuminate\Hashing\HashServiceProvider::class,
-        Illuminate\Mail\MailServiceProvider::class,
-        Illuminate\Notifications\NotificationServiceProvider::class,
-        Illuminate\Pagination\PaginationServiceProvider::class,
-        Illuminate\Pipeline\PipelineServiceProvider::class,
-        Illuminate\Queue\QueueServiceProvider::class,
-        Illuminate\Redis\RedisServiceProvider::class,
-        Illuminate\Auth\Passwords\PasswordResetServiceProvider::class,
-        Illuminate\Session\SessionServiceProvider::class,
-        Illuminate\Translation\TranslationServiceProvider::class,
-        Illuminate\Validation\ValidationServiceProvider::class,
-        Illuminate\View\ViewServiceProvider::class,
+                                                                                                                                                    /*
+                                                                                                                                                             * Laravel Framework Service Providers...
+                                                                                                                                                                      */
+                                                                                                                                                                              Illuminate\Auth\AuthServiceProvider::class,
+                                                                                                                                                                                      Illuminate\Broadcasting\BroadcastServiceProvider::class,
+                                                                                                                                                                                              Illuminate\Bus\BusServiceProvider::class,
+                                                                                                                                                                                                      Illuminate\Cache\CacheServiceProvider::class,
+                                                                                                                                                                                                              Illuminate\Foundation\Providers\ConsoleSupportServiceProvider::class,
+                                                                                                                                                                                                                      Illuminate\Cookie\CookieServiceProvider::class,
+                                                                                                                                                                                                                              Illuminate\Database\DatabaseServiceProvider::class,
+                                                                                                                                                                                                                                      Illuminate\Encryption\EncryptionServiceProvider::class,
+                                                                                                                                                                                                                                              Illuminate\Filesystem\FilesystemServiceProvider::class,
+                                                                                                                                                                                                                                                      Illuminate\Foundation\Providers\FoundationServiceProvider::class,
+                                                                                                                                                                                                                                                              Illuminate\Hashing\HashServiceProvider::class,
+                                                                                                                                                                                                                                                                      Illuminate\Mail\MailServiceProvider::class,
+                                                                                                                                                                                                                                                                              Illuminate\Notifications\NotificationServiceProvider::class,
+                                                                                                                                                                                                                                                                                      Illuminate\Pagination\PaginationServiceProvider::class,
+                                                                                                                                                                                                                                                                                              Illuminate\Pipeline\PipelineServiceProvider::class,
+                                                                                                                                                                                                                                                                                                      Illuminate\Queue\QueueServiceProvider::class,
+                                                                                                                                                                                                                                                                                                              Illuminate\Redis\RedisServiceProvider::class,
+                                                                                                                                                                                                                                                                                                                      Illuminate\Auth\Passwords\PasswordResetServiceProvider::class,
+                                                                                                                                                                                                                                                                                                                              Illuminate\Session\SessionServiceProvider::class,
+                                                                                                                                                                                                                                                                                                                                      Illuminate\Translation\TranslationServiceProvider::class,
+                                                                                                                                                                                                                                                                                                                                              Illuminate\Validation\ValidationServiceProvider::class,
+                                                                                                                                                                                                                                                                                                                                                      Illuminate\View\ViewServiceProvider::class,
 
-        /*
-         * Package Service Providers...
-         */
-        MongoDB\Laravel\MongodbServiceProvider::class, // Tambahkan ini!
+                                                                                                                                                                                                                                                                                                                                                              /*
+                                                                                                                                                                                                                                                                                                                                                                       * Package Service Providers...
+                                                                                                                                                                                                                                                                                                                                                                                */
+                                                                                                                                                                                                                                                                                                                                                                                        MongoDB\Laravel\MongodbServiceProvider::class, // Tambahkan ini!
 
-        /*
-         * Application Service Providers...
-         */
-        App\Providers\AppServiceProvider::class,
-        App\Providers\AuthServiceProvider::class,
-        // App\Providers\BroadcastServiceProvider::class,
-        App\Providers\EventServiceProvider::class,
-        App\Providers\RouteServiceProvider::class,
+                                                                                                                                                                                                                                                                                                                                                                                                /*
+                                                                                                                                                                                                                                                                                                                                                                                                         * Application Service Providers...
+                                                                                                                                                                                                                                                                                                                                                                                                                  */
+                                                                                                                                                                                                                                                                                                                                                                                                                          App\Providers\AppServiceProvider::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                  App\Providers\AuthServiceProvider::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                          // App\Providers\BroadcastServiceProvider::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                  App\Providers\EventServiceProvider::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                          App\Providers\RouteServiceProvider::class,
 
-    ],
+                                                                                                                                                                                                                                                                                                                                                                                                                                                              ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Class Aliases
-    |--------------------------------------------------------------------------
-    |
-    | Daftar alias yang dapat digunakan sebagai referensi singkat di dalam kode.
-    |
-    */
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                  /*
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |--------------------------------------------------------------------------
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Class Aliases
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |--------------------------------------------------------------------------
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Daftar alias yang dapat digunakan sebagai referensi singkat di dalam kode.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              */
 
-    'aliases' => [
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  'aliases' => [
 
-        'App' => Illuminate\Support\Facades\App::class,
-        'Arr' => Illuminate\Support\Arr::class,
-        'Auth' => Illuminate\Support\Facades\Auth::class,
-        'Cache' => Illuminate\Support\Facades\Cache::class,
-        'Config' => Illuminate\Support\Facades\Config::class,
-        'DB' => Illuminate\Support\Facades\DB::class,
-        'Eloquent' => Jenssegers\Mongodb\Eloquent\Model::class, // Tambahkan ini!
-        'Event' => Illuminate\Support\Facades\Event::class,
-        'Hash' => Illuminate\Support\Facades\Hash::class,
-        'Log' => Illuminate\Support\Facades\Log::class,
-        'MongoDB' => Jenssegers\Mongodb\Facades\MongoDB::class, // Tambahkan ini!
-        'Route' => Illuminate\Support\Facades\Route::class,
-        'Schema' => Illuminate\Support\Facades\Schema::class,
-        'Session' => Illuminate\Support\Facades\Session::class,
-        'Storage' => Illuminate\Support\Facades\Storage::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          'App' => Illuminate\Support\Facades\App::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  'Arr' => Illuminate\Support\Arr::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          'Auth' => Illuminate\Support\Facades\Auth::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  'Cache' => Illuminate\Support\Facades\Cache::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          'Config' => Illuminate\Support\Facades\Config::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  'DB' => Illuminate\Support\Facades\DB::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          'Eloquent' => Jenssegers\Mongodb\Eloquent\Model::class, // Tambahkan ini!
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  'Event' => Illuminate\Support\Facades\Event::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          'Hash' => Illuminate\Support\Facades\Hash::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  'Log' => Illuminate\Support\Facades\Log::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          'MongoDB' => Jenssegers\Mongodb\Facades\MongoDB::class, // Tambahkan ini!
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  'Route' => Illuminate\Support\Facades\Route::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          'Schema' => Illuminate\Support\Facades\Schema::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  'Session' => Illuminate\Support\Facades\Session::class,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          'Storage' => Illuminate\Support\Facades\Storage::class,
 
-    ],
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              ],
 
-];
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              ];
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              

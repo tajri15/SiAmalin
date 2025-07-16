@@ -16,6 +16,13 @@
     .action-buttons .btn {
         margin-right: 0.25rem;
     }
+    /* PERBAIKAN: CSS untuk mengatur ulang layout paginasi */
+    .pagination-container nav > div {
+        display: flex;
+        flex-direction: column-reverse; /* Membalik urutan: link di atas, teks di bawah */
+        align-items: center;
+        gap: 0.5rem; /* Memberi jarak antara link dan teks */
+    }
 </style>
 @endpush
 
@@ -33,8 +40,8 @@
             <form method="GET" action="{{ route('admin.patroli.index') }}">
                 <div class="row gx-2 gy-2 align-items-end">
                     <div class="col-md-3">
-                        <label for="nik_karyawan" class="form-label mb-1 small">NIK Karyawan:</label>
-                        <input type="text" name="nik_karyawan" id="nik_karyawan" class="form-control form-control-sm" value="{{ request('nik_karyawan') }}" placeholder="Masukkan NIK">
+                        <label for="nik_karyawan" class="form-label mb-1 small">Username Karyawan:</label>
+                        <input type="text" name="nik_karyawan" id="nik_karyawan" class="form-control form-control-sm" value="{{ request('nik_karyawan') }}" placeholder="Masukkan Username">
                     </div>
                     <div class="col-md-3">
                         <label for="nama_karyawan" class="form-label mb-1 small">Nama Karyawan:</label>
@@ -69,7 +76,7 @@
                     <thead>
                         <tr class="text-center">
                             <th>No</th>
-                            <th>Karyawan (NIK)</th>
+                            <th>Karyawan (Username)</th>
                             <th>Waktu Mulai</th>
                             <th>Waktu Selesai</th>
                             <th>Durasi</th>
@@ -144,9 +151,15 @@
                     </tbody>
                 </table>
             </div>
-            <div class="mt-3 d-flex justify-content-center">
+            
+            {{-- PERBAIKAN TAMPILAN PAGINASI --}}
+            @if ($patrols->hasPages())
+            <div class="pagination-container mt-3">
                 {{ $patrols->appends(request()->query())->links() }}
             </div>
+            @endif
+            {{-- AKHIR PERBAIKAN --}}
+
         </div>
     </div>
 </div>
@@ -154,7 +167,7 @@
 
 @push('scripts')
 <script>
-    // Inisialisasi tooltip Bootstrap jika digunakan
+    // Script untuk tooltip jika digunakan
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
       return new bootstrap.Tooltip(tooltipTriggerEl)

@@ -1,4 +1,5 @@
 <?php
+//app\Services\FaceRecognitionService.php
 
 namespace App\Services;
 
@@ -11,98 +12,98 @@ use Symfony\Component\Process\Process;
 class FaceRecognitionService
 {
     protected $pythonPath;
-    protected $scriptPath;
+        protected $scriptPath;
 
-    public function __construct()
-    {
-        $this->pythonPath = base_path('venv/Scripts/python.exe');
-        $this->scriptPath = base_path('face_recognition_service.py');
-    }
+            public function __construct()
+                {
+                        $this->pythonPath = base_path('venv/Scripts/python.exe');
+                                $this->scriptPath = base_path('face_recognition_service.py');
+                                    }
 
-    private function runPythonScript(array $commandArgs): array
-    {
-        $processCommand = array_merge([$this->pythonPath, $this->scriptPath], $commandArgs);
-        Log::info('--- MEMULAI PROSES PYTHON (METODE DESCRIPTOR) ---');
-        Log::info('Executing command: ' . implode(' ', $processCommand));
+                                        private function runPythonScript(array $commandArgs): array
+                                            {
+                                                    $processCommand = array_merge([$this->pythonPath, $this->scriptPath], $commandArgs);
+                                                            Log::info('--- MEMULAI PROSES PYTHON (METODE DESCRIPTOR) ---');
+                                                                    Log::info('Executing command: ' . implode(' ', $processCommand));
 
-        $process = new Process($processCommand);
-        $process->setTimeout(120);
-        $process->run();
-        
-        $rawOutput = $process->getOutput();
-        $errorOutput = $process->getErrorOutput();
-        Log::info('Output Mentah dari Python: ' . $rawOutput);
-        if (!empty($errorOutput)) {
-            Log::error('ERROR dari Skrip Python: ' . $errorOutput);
-        }
+                                                                            $process = new Process($processCommand);
+                                                                                    $process->setTimeout(120);
+                                                                                            $process->run();
+                                                                                                    
+                                                                                                            $rawOutput = $process->getOutput();
+                                                                                                                    $errorOutput = $process->getErrorOutput();
+                                                                                                                            Log::info('Output Mentah dari Python: ' . $rawOutput);
+                                                                                                                                    if (!empty($errorOutput)) {
+                                                                                                                                                Log::error('ERROR dari Skrip Python: ' . $errorOutput);
+                                                                                                                                                        }
 
-        if (!$process->isSuccessful()) {
-            throw new Exception('Proses Python gagal. Cek log. Error: ' . $errorOutput);
-        }
-        
-        // Filter untuk mengambil hanya bagian JSON dari output
-        preg_match('/\{.*\}/s', $rawOutput, $matches);
-        if (empty($matches)) {
-            throw new Exception('Tidak ada output JSON dari skrip Python.');
-        }
-        $jsonOutput = $matches[0];
-        $result = json_decode($jsonOutput, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new Exception('Gagal memproses JSON dari Python.');
-        }
-        return $result;
-    }
+                                                                                                                                                                if (!$process->isSuccessful()) {
+                                                                                                                                                                            throw new Exception('Proses Python gagal. Cek log. Error: ' . $errorOutput);
+                                                                                                                                                                                    }
+                                                                                                                                                                                            
+                                                                                                                                                                                                    // Filter untuk mengambil hanya bagian JSON dari output
+                                                                                                                                                                                                            preg_match('/\{.*\}/s', $rawOutput, $matches);
+                                                                                                                                                                                                                    if (empty($matches)) {
+                                                                                                                                                                                                                                throw new Exception('Tidak ada output JSON dari skrip Python.');
+                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                                $jsonOutput = $matches[0];
+                                                                                                                                                                                                                                                        $result = json_decode($jsonOutput, true);
+                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                        if (json_last_error() !== JSON_ERROR_NONE) {
+                                                                                                                                                                                                                                                                                    throw new Exception('Gagal memproses JSON dari Python.');
+                                                                                                                                                                                                                                                                                            }
+                                                                                                                                                                                                                                                                                                    return $result;
+                                                                                                                                                                                                                                                                                                        }
 
-    public function generateDescriptorFromImage(string $base64Image): ?array
-    {
-        $tempImageFile = 'temp/face_generate_' . uniqid() . '.txt';
-        Storage::put($tempImageFile, $base64Image);
-        $imagePath = Storage::path($tempImageFile);
+                                                                                                                                                                                                                                                                                                            public function generateDescriptorFromImage(string $base64Image): ?array
+                                                                                                                                                                                                                                                                                                                {
+                                                                                                                                                                                                                                                                                                                        $tempImageFile = 'temp/face_generate_' . uniqid() . '.txt';
+                                                                                                                                                                                                                                                                                                                                Storage::put($tempImageFile, $base64Image);
+                                                                                                                                                                                                                                                                                                                                        $imagePath = Storage::path($tempImageFile);
 
-        try {
-            $result = $this->runPythonScript(['generate', $imagePath]);
-            if ($result['success'] && isset($result['descriptor'])) {
-                return $result['descriptor'];
-            }
-            Log::warning('Generate Descriptor Gagal:', ['message' => $result['message'] ?? 'Unknown error.']);
-        } catch (Exception $e) {
-            Log::error('FaceRecognitionService Exception:', ['error' => $e->getMessage()]);
-        } finally {
-            Storage::delete($tempImageFile);
-        }
-        return null;
-    }
+                                                                                                                                                                                                                                                                                                                                                try {
+                                                                                                                                                                                                                                                                                                                                                            $result = $this->runPythonScript(['generate', $imagePath]);
+                                                                                                                                                                                                                                                                                                                                                                        if ($result['success'] && isset($result['descriptor'])) {
+                                                                                                                                                                                                                                                                                                                                                                                        return $result['descriptor'];
+                                                                                                                                                                                                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                                                                                                                                                                                                                Log::warning('Generate Descriptor Gagal:', ['message' => $result['message'] ?? 'Unknown error.']);
+                                                                                                                                                                                                                                                                                                                                                                                                                        } catch (Exception $e) {
+                                                                                                                                                                                                                                                                                                                                                                                                                                    Log::error('FaceRecognitionService Exception:', ['error' => $e->getMessage()]);
+                                                                                                                                                                                                                                                                                                                                                                                                                                            } finally {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                        Storage::delete($tempImageFile);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        return null;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                            }
 
-    public function verifyImageAgainstStored(string $base64Image, string $nik): array
-    {
-        $karyawan = Karyawan::where('nik', $nik)->first();
-        if (!$karyawan || empty($karyawan->face_embedding['embedding'])) {
-            return ['success' => false, 'match' => false, 'message' => 'Data wajah (vektor) karyawan tidak ditemukan.'];
-        }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                public function verifyImageAgainstStored(string $base64Image, string $nik): array
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            $karyawan = Karyawan::where('nik', $nik)->first();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    if (!$karyawan || empty($karyawan->face_embedding['embedding'])) {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                return ['success' => false, 'match' => false, 'message' => 'Data wajah (vektor) karyawan tidak ditemukan.'];
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        }
 
-        $tempLiveImageFile = 'temp/face_verify_' . uniqid() . '.txt';
-        $tempDescriptorFile = 'temp/desc_verify_' . uniqid() . '.json';
-        
-        Storage::put($tempLiveImageFile, $base64Image);
-        Storage::put($tempDescriptorFile, json_encode($karyawan->face_embedding['embedding']));
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                $tempLiveImageFile = 'temp/face_verify_' . uniqid() . '.txt';
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        $tempDescriptorFile = 'temp/desc_verify_' . uniqid() . '.json';
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        Storage::put($tempLiveImageFile, $base64Image);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                Storage::put($tempDescriptorFile, json_encode($karyawan->face_embedding['embedding']));
 
-        $liveImagePath = Storage::path($tempLiveImageFile);
-        $descriptorPath = Storage::path($tempDescriptorFile);
-        
-        try {
-            $result = $this->runPythonScript(['verify', $liveImagePath, $descriptorPath]);
-            if (!$result['success']) {
-                 throw new Exception($result['message'] ?? 'Verifikasi gagal di skrip Python.');
-            }
-            $finalResult = ['success' => true, 'match' => $result['match'], 'message' => $result['match'] ? 'Wajah terverifikasi.' : 'Wajah tidak cocok.'];
-        } catch (Exception $e) {
-            Log::error("Face verification failed for NIK {$nik}: " . $e->getMessage());
-            $finalResult = ['success' => false, 'match' => false, 'message' => 'Kesalahan internal saat verifikasi.'];
-        } finally {
-            Storage::delete([$tempLiveImageFile, $tempDescriptorFile]);
-        }
-        
-        return $finalResult;
-    }
-}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        $liveImagePath = Storage::path($tempLiveImageFile);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                $descriptorPath = Storage::path($tempDescriptorFile);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                try {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            $result = $this->runPythonScript(['verify', $liveImagePath, $descriptorPath]);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        if (!$result['success']) {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         throw new Exception($result['message'] ?? 'Verifikasi gagal di skrip Python.');
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 $finalResult = ['success' => true, 'match' => $result['match'], 'message' => $result['match'] ? 'Wajah terverifikasi.' : 'Wajah tidak cocok.'];
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         } catch (Exception $e) {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     Log::error("Face verification failed for NIK {$nik}: " . $e->getMessage());
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 $finalResult = ['success' => false, 'match' => false, 'message' => 'Kesalahan internal saat verifikasi.'];
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         } finally {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     Storage::delete([$tempLiveImageFile, $tempDescriptorFile]);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             return $finalResult;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 }

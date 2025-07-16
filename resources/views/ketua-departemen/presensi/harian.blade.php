@@ -48,14 +48,14 @@
                     <thead>
                         <tr class="text-center">
                             <th>No</th>
-                            <th>NIK</th>
+                            <th>Username</th>
                             <th>Nama Petugas</th>
                             <th>Jabatan</th>
                             <th>Jam Masuk</th>
                             <th>Foto Masuk</th>
                             <th>Jam Pulang</th>
                             <th>Foto Pulang</th>
-                            <th>Aksi</th>
+
                         </tr>
                     </thead>
                     <tbody>
@@ -89,11 +89,7 @@
                                 </a>
                                 @else - @endif
                             </td>
-                            <td class="text-center">
-                                 <a href="{{ route('ketua-departemen.presensi.detail_karyawan', $data->nik) }}" class="btn btn-info btn-sm py-0 px-1" data-bs-toggle="tooltip" title="Lihat Histori">
-                                    <i class="bi bi-eye-fill"></i>
-                                </a>
-                            </td>
+
                         </tr>
                         @empty
                         <tr>

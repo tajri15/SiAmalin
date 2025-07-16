@@ -233,7 +233,7 @@
                         <i class="bi bi-person-badge-fill me-2"></i>Data Petugas
                     </a>
                     <a href="{{ route('ketua-departemen.presensi.rekapitulasi') }}" class="list-group-item list-group-item-action p-3 {{ request()->routeIs('ketua-departemen.presensi.*') ? 'active' : '' }}">
-                        <i class="bi bi-calendar3-week-fill me-2"></i>Monitoring Presensi
+                        <i class="bi bi-calendar3-week-fill me-2"></i>Presensi Petugas
                     </a>
                      <a href="{{ route('ketua-departemen.laporan.index') }}" class="list-group-item list-group-item-action p-3 {{ request()->routeIs('ketua-departemen.laporan.*') ? 'active' : '' }}">
                         <i class="bi bi-card-list me-2"></i>Laporan Petugas

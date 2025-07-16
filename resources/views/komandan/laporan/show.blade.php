@@ -32,7 +32,7 @@
                             <td>: {{ $laporan->jam }}</td>
                         </tr>
                         <tr>
-                            <th>NIK Petugas</th>
+                            <th>Username Petugas</th>
                             <td>: {{ $laporan->nik }}</td>
                         </tr>
                         <tr>

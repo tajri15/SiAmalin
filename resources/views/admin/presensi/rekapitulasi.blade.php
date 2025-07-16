@@ -1,3 +1,4 @@
+{{-- File: resources/views/admin/presensi/rekapitulasi.blade.php --}}
 @extends('admin.layouts.app')
 
 @section('title', 'Rekapitulasi Presensi')
@@ -18,6 +19,9 @@
     .form-select-sm, .form-control-sm {
         font-size: 0.875rem;
     }
+    .action-buttons .btn, .action-buttons .dropdown-item {
+        font-size: 0.75rem;
+    }
 </style>
 @endpush
 
@@ -26,6 +30,7 @@
     <h1 class="h3 mb-2 text-gray-800">Rekapitulasi Presensi</h1>
     <p class="mb-4">Menampilkan data presensi karyawan berdasarkan filter yang dipilih.</p>
 
+    {{-- Card Filter --}}
     <div class="card shadow mb-4">
         <div class="card-header py-3">
             <h6 class="m-0 font-weight-bold text-primary">Filter Data Presensi</h6>
@@ -52,8 +57,8 @@
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label for="nik" class="form-label mb-1 small">NIK Karyawan:</label>
-                        <input type="text" name="nik" id="nik" class="form-control form-control-sm" value="{{ $searchNik ?? '' }}" placeholder="Masukkan NIK">
+                        <label for="nik" class="form-label mb-1 small">Username Karyawan:</label>
+                        <input type="text" name="nik" id="nik" class="form-control form-control-sm" value="{{ $searchNik ?? '' }}" placeholder="Masukkan Username">
                     </div>
                      <div class="col-md-3">
                         <label for="nama" class="form-label mb-1 small">Nama Karyawan:</label>
@@ -72,6 +77,7 @@
         </div>
     </div>
 
+    {{-- Card Data Presensi --}}
     <div class="card shadow mb-4">
         <div class="card-header py-3">
             <h6 class="m-0 font-weight-bold text-primary">Data Presensi ({{ $namaBulan[(int)$bulanIni] }} {{ $tahunIni }})</h6>
@@ -83,12 +89,13 @@
                         <tr class="text-center">
                             <th>No</th>
                             <th>Tanggal</th>
-                            <th>NIK</th>
-                            <th>Nama Karyawan</th>
+                            <th>Username</th>
+                            <th>Nama</th>
                             <th>Jam Masuk</th>
                             <th>Foto Masuk</th>
                             <th>Jam Pulang</th>
                             <th>Foto Pulang</th>
+                            <th>Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -108,7 +115,9 @@
                             </td>
                             <td class="text-center">{{ $data->jam_in ?? '-' }}</td>
                             <td class="text-center">
-                                @if($data->foto_in)
+                                @if($data->foto_in == 'admin')
+                                    <span class="badge bg-info">Admin</span>
+                                @elseif($data->foto_in)
                                 <a href="{{ asset('storage/' . $data->foto_in) }}" data-bs-toggle="tooltip" title="Lihat Foto Masuk" target="_blank">
                                     <img src="{{ asset('storage/' . $data->foto_in) }}" alt="Masuk" class="img-thumbnail-xs">
                                 </a>
@@ -116,16 +125,101 @@
                             </td>
                             <td class="text-center">{{ $data->jam_out ?? '-' }}</td>
                             <td class="text-center">
-                                @if($data->foto_out)
+                                {{-- PERBAIKAN: Menampilkan "Admin" jika foto_out berisi 'admin' --}}
+                                @if($data->foto_out == 'admin')
+                                    <span class="badge bg-info">Admin</span>
+                                @elseif($data->foto_out)
                                 <a href="{{ asset('storage/' . $data->foto_out) }}" data-bs-toggle="tooltip" title="Lihat Foto Pulang" target="_blank">
                                     <img src="{{ asset('storage/' . $data->foto_out) }}" alt="Pulang" class="img-thumbnail-xs">
                                 </a>
                                 @else - @endif
                             </td>
+                            <td class="text-center action-buttons">
+                                <div class="dropdown">
+                                    <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="dropdownMenuButton-{{ $data->_id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Aksi
+                                    </button>
+                                    <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton-{{ $data->_id }}">
+                                        <li><a class="dropdown-item" href="{{ route('admin.presensi.edit', $data->_id) }}"><i class="bi bi-pencil-square me-2"></i>Edit</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#resetMasukModal-{{ $data->_id }}"><i class="bi bi-arrow-counterclockwise me-2"></i>Reset Masuk</a></li>
+                                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#resetPulangModal-{{ $data->_id }}"><i class="bi bi-box-arrow-left me-2"></i>Reset Pulang</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ $data->_id }}"><i class="bi bi-trash me-2"></i>Hapus</a></li>
+                                    </ul>
+                                </div>
+                            </td>
                         </tr>
+
+                        <!-- Modal Reset Masuk -->
+                        <div class="modal fade" id="resetMasukModal-{{ $data->_id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Konfirmasi Reset Presensi Masuk</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        Yakin ingin mereset data presensi masuk untuk <strong>{{ $data->karyawan->nama_lengkap ?? $data->nik }}</strong> pada tanggal {{ \Carbon\Carbon::parse($data->tgl_presensi)->isoFormat('D MMM YY') }}?
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                                        <form action="{{ route('admin.presensi.reset.masuk', $data->_id) }}" method="POST">
+                                            @csrf
+                                            <button type="submit" class="btn btn-warning">Ya, Reset</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Modal Reset Pulang -->
+                        <div class="modal fade" id="resetPulangModal-{{ $data->_id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Konfirmasi Reset Presensi Pulang</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        Yakin ingin mereset data presensi pulang untuk <strong>{{ $data->karyawan->nama_lengkap ?? $data->nik }}</strong> pada tanggal {{ \Carbon\Carbon::parse($data->tgl_presensi)->isoFormat('D MMM YY') }}?
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                                        <form action="{{ route('admin.presensi.reset.pulang', $data->_id) }}" method="POST">
+                                            @csrf
+                                            <button type="submit" class="btn btn-warning">Ya, Reset</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Modal Hapus -->
+                        <div class="modal fade" id="deleteModal-{{ $data->_id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Konfirmasi Hapus Presensi</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        Yakin ingin menghapus data presensi untuk <strong>{{ $data->karyawan->nama_lengkap ?? $data->nik }}</strong> pada tanggal {{ \Carbon\Carbon::parse($data->tgl_presensi)->isoFormat('D MMM YY') }}? Tindakan ini tidak dapat dibatalkan.
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                                        <form action="{{ route('admin.presensi.hapus', $data->_id) }}" method="POST">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-danger">Ya, Hapus</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         @empty
                         <tr>
-                            <td colspan="8" class="text-center">Tidak ada data presensi untuk periode dan filter ini.</td>
+                            <td colspan="9" class="text-center">Tidak ada data presensi untuk periode dan filter ini.</td>
                         </tr>
                         @endforelse
                     </tbody>

@@ -1,4 +1,5 @@
 <?php
+//app\Models\Karyawan.php
 
 namespace App\Models;
 

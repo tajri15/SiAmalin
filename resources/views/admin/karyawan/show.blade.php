@@ -13,7 +13,7 @@
 
     <div class="card shadow mb-4">
         <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-            <h6 class="m-0 font-weight-bold text-primary">Data {{ $karyawan->nama_lengkap }} (NIK: {{ $karyawan->nik }})</h6>
+            <h6 class="m-0 font-weight-bold text-primary">Data {{ $karyawan->nama_lengkap }} (Username: {{ $karyawan->nik }})</h6>
             <div>
                 <a href="{{ route('admin.karyawan.edit', $karyawan->_id) }}" class="btn btn-warning btn-sm" title="Edit Data Karyawan">
                     <i class="bi bi-pencil-fill"></i> Edit
@@ -34,7 +34,7 @@
                 <div class="col-md-9">
                     <table class="table table-borderless table-sm">
                         <tr>
-                            <th style="width: 25%;">NIK</th>
+                            <th style="width: 25%;">Username</th>
                             <td>: {{ $karyawan->nik }}</td>
                         </tr>
                         <tr>

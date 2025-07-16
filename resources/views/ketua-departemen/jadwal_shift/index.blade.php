@@ -25,7 +25,7 @@
     }
     .shift-pagi { background-color: #d1e7dd !important; color: #0f5132 !important; } 
     .shift-malam { background-color: #cfe2ff !important; color: #084298 !important; } 
-    .shift-libur { background-color: #f8f9fa !important; color: #6c757d !important; } 
+    .shift-libur { background-color: #f2ababff !important; color: #000000ff !important; } 
     .shift-custom { background-color: #e2e3e5 !important; color: #495057 !important; } 
 
     .filter-form .form-control-sm, .filter-form .btn-sm {
@@ -97,7 +97,7 @@
                         <tr>
                             <td class="nama-karyawan">
                                 {{ $dataJadwal['nama_lengkap'] }}
-                                <small class="d-block text-muted">NIK: {{ $nik }}</small>
+                                <small class="d-block text-muted">Username: {{ $nik }}</small>
                             </td>
                             @foreach ($datesOfWeek as $tanggal)
                                 @php

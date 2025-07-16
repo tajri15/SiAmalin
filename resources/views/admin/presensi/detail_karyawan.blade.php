@@ -1,3 +1,4 @@
+{{-- File: resources/views/admin/presensi/detail_karyawan.blade.php --}}
 @extends('admin.layouts.app')
 
 @section('title', 'Detail Presensi Karyawan: ' . $karyawan->nama_lengkap)
@@ -60,7 +61,7 @@
                  onerror="this.onerror=null;this.src='{{ asset('assets/img/sample/avatar/avatar1.jpg') }}';">
             <div>
                 <h4>{{ $karyawan->nama_lengkap }}</h4>
-                <p class="mb-0">NIK: {{ $karyawan->nik }}</p>
+                <p class="mb-0">Username: {{ $karyawan->nik }}</p>
                 <p>Jabatan: {{ $karyawan->jabatan }}</p>
             </div>
         </div>
@@ -130,7 +131,9 @@
                             <td>{{ $tanggalCarbon->isoFormat('dddd') }}</td>
                             <td class="text-center">{{ $data->jam_in ?? '-' }}</td>
                             <td class="text-center">
-                                @if($data->foto_in)
+                                @if($data->foto_in == 'admin')
+                                    <span class="badge bg-info">Admin</span>
+                                @elseif($data->foto_in)
                                 <a href="{{ asset('storage/' . $data->foto_in) }}" data-bs-toggle="tooltip" title="Lihat Foto Masuk" target="_blank">
                                     <img src="{{ asset('storage/' . $data->foto_in) }}" alt="Masuk" class="img-thumbnail-xs">
                                 </a>
@@ -138,10 +141,13 @@
                                 -
                                 @endif
                             </td>
-                            <td><small>{{ $data->lokasi_in ?? '-' }}</small></td>
+                            <td><small>{{ $data->lokasi_in == 'admin' ? 'Admin' : ($data->lokasi_in ?? '-') }}</small></td>
                             <td class="text-center">{{ $data->jam_out ?? '-' }}</td>
                             <td class="text-center">
-                                @if($data->foto_out)
+                                {{-- PERBAIKAN: Menambahkan logika untuk menampilkan "Admin" --}}
+                                @if($data->foto_out == 'admin')
+                                    <span class="badge bg-info">Admin</span>
+                                @elseif($data->foto_out)
                                 <a href="{{ asset('storage/' . $data->foto_out) }}" data-bs-toggle="tooltip" title="Lihat Foto Pulang" target="_blank">
                                     <img src="{{ asset('storage/' . $data->foto_out) }}" alt="Pulang" class="img-thumbnail-xs">
                                 </a>
@@ -149,7 +155,7 @@
                                 -
                                 @endif
                             </td>
-                            <td><small>{{ $data->lokasi_out ?? '-' }}</small></td>
+                            <td><small>{{ $data->lokasi_out == 'admin' ? 'Admin' : ($data->lokasi_out ?? '-') }}</small></td>
                         </tr>
                         @empty
                         <tr>

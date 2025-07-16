@@ -38,7 +38,7 @@
                 <div class="row">
                     <div class="col-md-6">
                         <div class="mb-3">
-                            <label for="nik" class="form-label">NIK <span class="text-danger">*</span></label>
+                            <label for="nik" class="form-label">Username <span class="text-danger">*</span></label>
                             <input type="text" class="form-control @error('nik') is-invalid @enderror" id="nik" name="nik" value="{{ old('nik', $karyawan->nik) }}" required>
                             @error('nik') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>

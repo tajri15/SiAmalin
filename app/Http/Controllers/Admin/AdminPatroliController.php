@@ -1,4 +1,5 @@
 <?php
+// File: app/Http/Controllers/Admin/AdminPatroliController.php
 
 namespace App\Http\Controllers\Admin;
 
@@ -25,13 +26,19 @@ class AdminPatroliController extends Controller
                        ->where('status', 'selesai');
 
         if ($request->filled('nik_karyawan')) {
-            $query->where('karyawan_nik', $request->nik_karyawan);
+            $query->where('karyawan_nik', 'like', '%' . $request->nik_karyawan . '%');
         }
 
         if ($request->filled('nama_karyawan')) {
-            $query->whereHas('karyawan', function ($q) use ($request) {
-                $q->where('nama_lengkap', 'like', '%' . $request->nama_karyawan . '%');
-            });
+            $niksFromName = Karyawan::where('nama_lengkap', 'regexp', "/.*{$request->nama_karyawan}.*/i")
+                                      ->pluck('nik')
+                                      ->toArray();
+            
+            if (empty($niksFromName)) {
+                $query->whereRaw(fn($q) => $q->where('_id', '=', '0'));
+            } else {
+                $query->whereIn('karyawan_nik', $niksFromName);
+            }
         }
 
         if ($request->filled('tanggal_mulai')) {
@@ -52,13 +59,12 @@ class AdminPatroliController extends Controller
 
     /**
      * Display the specified patrol record.
-     *
-     * @param  string  $patrolId
-     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
+     * MODIFIED: Eager load karyawan and pass office location/radius to view.
      */
     public function show($patrolId)
     {
-        $patrol = Patrol::with('karyawan', 'points')->find($patrolId);
+        // --- PERBAIKAN: Menggunakan with() untuk eager loading ---
+        $patrol = Patrol::with(['karyawan', 'points'])->find($patrolId);
 
         if (!$patrol) {
             return redirect()->route('admin.patroli.index')->with('error', 'Data patroli tidak ditemukan.');
@@ -71,7 +77,11 @@ class AdminPatroliController extends Controller
             return null; 
         })->filter()->toArray();
 
-        return view('admin.patroli.show', compact('patrol', 'pathForMap'));
+        // --- PERBAIKAN: Mengambil data lokasi dan radius dari relasi karyawan ---
+        $officeLocation = $patrol->karyawan->office_location ?? null;
+        $officeRadius = $patrol->karyawan->office_radius ?? null;
+
+        return view('admin.patroli.show', compact('patrol', 'pathForMap', 'officeLocation', 'officeRadius'));
     }
 
     /**

@@ -39,7 +39,7 @@ Route::middleware(['web'])->group(function () {
             } elseif ($user->is_ketua_departemen) {
                 return redirect()->route('ketua-departemen.dashboard');
             }
-            return redirect()->route('dashboard'); // Petugas Keamanan
+            return redirect()->route('dashboard');
         }
         return app(AuthController::class)->showLoginForm();
     })->name('login');
@@ -53,6 +53,7 @@ Route::middleware(['web'])->group(function () {
 Route::middleware(['auth:karyawan'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/proseslogout', [AuthController::class, 'proseslogout'])->name('proseslogout');
+    
     Route::get('/profile', function () {
         $karyawan = Auth::guard('karyawan')->user();
         return view('presensi.profile', compact('karyawan'));
@@ -85,6 +86,12 @@ Route::middleware(['auth:karyawan'])->group(function () {
         Route::post('/stop', [PatroliController::class, 'stopPatrol'])->name('stop');
         Route::get('/histori', [PatroliController::class, 'historiPatroli'])->name('histori');
         Route::get('/histori/{patrolId}', [PatroliController::class, 'detailHistoriPatroli'])->name('histori.detail');
+        
+        // Route untuk cek radius real-time
+        Route::post('/check-radius', [PatroliController::class, 'checkRadius'])->name('check_radius');
+        
+        // NEW: Route untuk verifikasi wajah patroli
+        Route::post('/verify-face', [PatroliController::class, 'verifyFace'])->name('verify_face');
     });
 
     Route::post('/set-face-verified-session', [AuthController::class, 'setFaceVerifiedSession'])->name('session.set_face_verified');
@@ -125,12 +132,19 @@ Route::middleware(['auth:karyawan'])->group(function () {
             Route::get('/karyawan/{nik}', [AdminPresensiController::class, 'detailKaryawan'])->name('detail_karyawan');
             Route::get('/edit/{id}', [AdminPresensiController::class, 'editPresensi'])->name('edit');
             Route::put('/update/{id}', [AdminPresensiController::class, 'updatePresensi'])->name('update');
+            
+            // --- PERBAIKAN FINAL RUTE ---
+            // Menggunakan notasi titik (dot) pada nama rute agar konsisten
+            Route::post('/reset-masuk/{id}', [AdminPresensiController::class, 'resetMasuk'])->name('reset.masuk');
+            Route::post('/reset-pulang/{id}', [AdminPresensiController::class, 'resetPulang'])->name('reset.pulang');
+            Route::delete('/hapus/{id}', [AdminPresensiController::class, 'destroy'])->name('hapus');
         });
         
         Route::prefix('laporan')->name('laporan.')->group(function () {
             Route::get('/', [AdminLaporanController::class, 'index'])->name('index');
             Route::get('/{id}', [AdminLaporanController::class, 'show'])->name('show');
             Route::post('/{id}/update-status', [AdminLaporanController::class, 'updateStatus'])->name('update_status');
+            Route::delete('/{id}', [AdminLaporanController::class, 'destroy'])->name('destroy');
         });
 
         Route::prefix('patroli')->name('patroli.')->group(function () {
@@ -139,7 +153,6 @@ Route::middleware(['auth:karyawan'])->group(function () {
             Route::delete('/destroy/{patrolId}', [AdminPatroliController::class, 'destroy'])->name('destroy');
         });
 
-        // Rute untuk Backup Data
         Route::prefix('backup')->name('backup.')->group(function () {
             Route::get('/', [AdminBackupController::class, 'index'])->name('index');
             Route::post('/process', [AdminBackupController::class, 'processBackup'])->name('process');

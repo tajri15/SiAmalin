@@ -32,7 +32,7 @@
                             <td>: {{ $laporan->jam }}</td>
                         </tr>
                         <tr>
-                            <th>NIK Karyawan</th>
+                            <th>Username Karyawan</th>
                             <td>: {{ $laporan->nik }}</td>
                         </tr>
                         <tr>

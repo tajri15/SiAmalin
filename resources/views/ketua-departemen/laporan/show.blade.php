@@ -15,7 +15,7 @@
         <div class="col-lg-8">
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Informasi Laporan (Fakultas {{ $fakultas }} - Dept. {{ $departemen }})</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">Informasi Laporan ({{ $fakultas }} - Dept. {{ $departemen }})</h6>
                 </div>
                 <div class="card-body">
                     <table class="table table-borderless table-sm">
@@ -32,7 +32,7 @@
                             <td>: {{ $laporan->jam }}</td>
                         </tr>
                         <tr>
-                            <th>NIK Petugas</th>
+                            <th>Username Petugas</th>
                             <td>: {{ $laporan->nik }}</td>
                         </tr>
                         <tr>

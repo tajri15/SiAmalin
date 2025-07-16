@@ -54,7 +54,7 @@
             <thead>
                 <tr>
                     <th>No</th>
-                    <th>NIK</th>
+                    <th>Username</th>
                     <th>Nama Petugas</th>
                     <th>Hari Kerja Terjadwal</th>
                     <th>Hari Hadir Aktual</th>

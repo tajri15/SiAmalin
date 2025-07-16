@@ -159,7 +159,7 @@
           @csrf
 
           <div class="mb-3 position-relative">
-            <input type="text" name="nik" id="nik" class="form-control" placeholder="Masukkan NIK" required value="{{ old('nik') }}">
+            <input type="text" name="nik" id="nik" class="form-control" placeholder="Masukkan Username" required value="{{ old('nik') }}">
             <i class="bi bi-x-circle input-icon" onclick="clearField('nik')" style="cursor: pointer; display: none;" id="clearNikIcon"></i>
           </div>
 

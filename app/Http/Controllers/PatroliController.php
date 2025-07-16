@@ -1,4 +1,5 @@
 <?php
+// File: app/Http/Controllers/PatroliController.php
 
 namespace App\Http\Controllers;
 
@@ -8,15 +9,15 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log; 
+use Illuminate\Support\Facades\Storage;
 use MongoDB\BSON\UTCDateTime;
-
+use App\Helpers\FaceRecognitionHelper;
 
 class PatroliController extends Controller
 {
     /**
      * Display the patrol page for employees.
-     *
-     * @return \Illuminate\View\View
+     * MODIFIED: Pass office location and radius to the view.
      */
     public function index()
     {
@@ -39,25 +40,55 @@ class PatroliController extends Controller
                 'start_time' => $activePatrol->start_time->timestamp * 1000, 
                 'total_distance_meters' => $activePatrol->total_distance_meters ?? 0,
                 'duration_seconds' => $currentDurationSeconds, 
+                'face_verified' => $activePatrol->face_verified ?? false, // NEW: Face verification status
                 'path' => $activePatrol->points()->orderBy('timestamp', 'asc')->get(['latitude', 'longitude'])->map(function($point) {
                     return [$point->latitude, $point->longitude]; 
                 })->toArray()
             ];
         }
 
-        return view('patroli.index', compact('karyawan', 'patrolData'));
+        // Get office location and radius for the view
+        $officeLocation = $karyawan->office_location;
+        $officeRadius = $karyawan->office_radius;
+
+        // NEW: Pass face descriptor for verification
+        $faceDescriptor = null;
+        if ($karyawan && !empty($karyawan->face_embedding['embedding'])) {
+            $faceDescriptor = json_encode($karyawan->face_embedding['embedding']);
+        }
+
+        return view('patroli.index', compact('karyawan', 'patrolData', 'officeLocation', 'officeRadius', 'faceDescriptor'));
     }
 
     /**
      * Start a new patrol session.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * MODIFIED: Add radius validation before starting a patrol.
      */
     public function startPatrol(Request $request)
     {
+        $request->validate([
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric',
+        ]);
+
         $karyawan = Auth::guard('karyawan')->user();
 
+        // --- PERBAIKAN: Validasi Radius Lokasi ---
+        if (empty($karyawan->office_location)) {
+            return response()->json(['success' => false, 'message' => 'Patroli gagal dimulai. Lokasi kerja Anda belum diatur oleh Admin.'], 400);
+        }
+
+        $jarakResult = FaceRecognitionHelper::isWithinOfficeRadius($request->latitude, $request->longitude, $karyawan);
+
+        if (!$jarakResult['within']) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Patroli tidak dapat dimulai. Anda berada di luar radius lokasi kerja Anda. Jarak: ' . round($jarakResult['distance']) . 'm.'
+            ], 403);
+        }
+        // --- AKHIR PERBAIKAN ---
+
+        // Batalkan patroli sebelumnya yang mungkin masih aktif
         Patrol::where('karyawan_nik', $karyawan->nik)
             ->whereIn('status', ['aktif', 'jeda'])
             ->update([
@@ -72,6 +103,8 @@ class PatroliController extends Controller
                 'status' => 'aktif',
                 'total_distance_meters' => 0,
                 'duration_seconds' => 0,
+                'face_verified' => false, // NEW: Face verification status
+                'face_verification_image' => null, // NEW: Face verification image
                 'path' => []
             ]);
 
@@ -88,7 +121,62 @@ class PatroliController extends Controller
     }
 
     /**
+     * NEW: Verify face for patrol
+     */
+    public function verifyFace(Request $request)
+    {
+        $request->validate([
+            'patrol_id' => 'required|string',
+            'face_image' => 'required|string',
+        ]);
+
+        $karyawan = Auth::guard('karyawan')->user();
+
+        try {
+            $patrol = Patrol::where('_id', $request->patrol_id)
+                            ->where('karyawan_nik', $karyawan->nik)
+                            ->whereIn('status', ['aktif', 'jeda'])
+                            ->first();
+
+            if (!$patrol) {
+                return response()->json(['success' => false, 'message' => 'Patroli tidak ditemukan atau sudah selesai.'], 404);
+            }
+
+            if ($patrol->face_verified) {
+                return response()->json(['success' => true, 'message' => 'Wajah sudah terverifikasi untuk patroli ini.']);
+            }
+
+            // Save face verification image
+            $currentDate = now();
+            $yearMonth = $currentDate->format('Y/m');
+            
+            $faceImagePath = $this->processBase64Image(
+                $request->face_image,
+                "patroli/{$yearMonth}/verification",
+                'patrol_faceverify_' . $karyawan->nik . '_' . time()
+            );
+
+            // Update patrol with face verification
+            $patrol->update([
+                'face_verified' => true,
+                'face_verification_image' => $faceImagePath['storage_path'],
+                'face_verification_time' => new UTCDateTime($currentDate->timestamp * 1000)
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Verifikasi wajah berhasil.'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error verifyFace: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Gagal memverifikasi wajah: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Store a new patrol point.
+     * MODIFIED: Add radius validation before storing point.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\JsonResponse
@@ -116,6 +204,19 @@ class PatroliController extends Controller
                 return response()->json(['success' => false, 'message' => 'Patroli tidak aktif atau tidak ditemukan.'], 404);
             }
 
+            // --- TAMBAHAN: Validasi Radius Real-time ---
+            $jarakResult = FaceRecognitionHelper::isWithinOfficeRadius($request->latitude, $request->longitude, $karyawan);
+
+            if (!$jarakResult['within']) {
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Titik patroli tidak disimpan. Anda berada di luar radius lokasi kerja.',
+                    'outside_radius' => true,
+                    'distance' => round($jarakResult['distance'])
+                ], 403);
+            }
+            // --- AKHIR TAMBAHAN ---
+
             PatrolPoint::create([
                 'patrol_id' => $request->patrol_id,
                 'karyawan_nik' => $karyawan->nik,
@@ -128,11 +229,50 @@ class PatroliController extends Controller
             
             $patrol->touch(); 
 
-            return response()->json(['success' => true, 'message' => 'Titik patroli disimpan.']);
+            return response()->json([
+                'success' => true, 
+                'message' => 'Titik patroli disimpan.',
+                'outside_radius' => false
+            ]);
         } catch (\Exception $e) {
             Log::error('Error storePoint: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Gagal menyimpan titik patroli: ' . $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Check if current location is within office radius.
+     * NEW METHOD: For real-time radius checking.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function checkRadius(Request $request)
+    {
+        $request->validate([
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric',
+        ]);
+
+        $karyawan = Auth::guard('karyawan')->user();
+
+        if (empty($karyawan->office_location)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lokasi kantor belum diatur.',
+                'within_radius' => false,
+                'distance' => 0
+            ]);
+        }
+
+        $jarakResult = FaceRecognitionHelper::isWithinOfficeRadius($request->latitude, $request->longitude, $karyawan);
+
+        return response()->json([
+            'success' => true,
+            'within_radius' => $jarakResult['within'],
+            'distance' => round($jarakResult['distance']),
+            'message' => $jarakResult['within'] ? 'Dalam radius kerja' : 'Di luar radius kerja'
+        ]);
     }
 
     /**
@@ -206,9 +346,9 @@ class PatroliController extends Controller
         }
     }
 
-
     /**
      * Stop an active or paused patrol session.
+     * MODIFIED: Add face verification check before allowing stop
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\JsonResponse
@@ -230,6 +370,15 @@ class PatroliController extends Controller
 
             if (!$patrol) {
                 return response()->json(['success' => false, 'message' => 'Patroli tidak ditemukan atau sudah selesai.'], 404);
+            }
+
+            // NEW: Check if face verification is required
+            if (!$patrol->face_verified) {
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Patroli tidak dapat dihentikan. Anda harus melakukan verifikasi wajah terlebih dahulu.',
+                    'face_verification_required' => true
+                ], 403);
             }
 
             $points = PatrolPoint::where('patrol_id', $patrol->_id)
@@ -264,10 +413,8 @@ class PatroliController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function historiPatroli(Request $request) // KOREKSI 2: Tambahkan Request $request
+    public function historiPatroli(Request $request)
     {
-        // KOREKSI 3: Hapus paksa pesan error lama dari sesi
-        // Ini memastikan halaman histori selalu bersih dari flash message sebelumnya.
         $request->session()->forget('error');
 
         $karyawan = Auth::guard('karyawan')->user();
@@ -293,18 +440,50 @@ class PatroliController extends Controller
                         ->first();
 
         if (!$patrol) {
-            // Tempat di mana flash message error diset
             return redirect()->route('patroli.histori')->with('error', 'Data patroli tidak ditemukan.');
         }
         
         $pathForMap = collect($patrol->path)->map(function ($point) {
             if (is_array($point) && count($point) >= 2) {
-                return [$point[1], $point[0]]; // Balik urutan menjadi [lat, lng]
+                return [$point[1], $point[0]];
             }
             return null;
         })->filter()->toArray();
 
-
         return view('patroli.detail', compact('patrol', 'karyawan', 'pathForMap'));
+    }
+
+    /**
+     * NEW: Process base64 image for face verification
+     */
+    private function processBase64Image($base64Image, $folderPath, $fileNamePrefix = 'img_')
+    {
+        try {
+            if (!preg_match('/^data:image\/(jpeg|png|jpg);base64,/', $base64Image, $typeMatch)) {
+                throw new \Exception('Format gambar tidak valid. Hanya menerima JPEG/JPG/PNG');
+            }
+
+            $imageType = $typeMatch[1]; 
+            $data = explode(',', $base64Image)[1];
+            $decodedImage = base64_decode($data);
+
+            if (!$decodedImage) {
+                throw new \Exception('Gagal mendekode gambar base64');
+            }
+
+            $storageRelativePath = "{$folderPath}/{$fileNamePrefix}" . uniqid() . '.' . $imageType;
+            
+            Storage::disk('public')->put($storageRelativePath, $decodedImage);
+
+            return [
+                'storage_path' => $storageRelativePath, 
+                'full_path' => storage_path("app/public/{$storageRelativePath}"), 
+                'mime_type' => 'image/'.$imageType
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error proses gambar base64: '.$e->getMessage());
+            throw $e; 
+        }
     }
 }

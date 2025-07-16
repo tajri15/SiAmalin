@@ -1,4 +1,5 @@
 <?php
+// File: app/Http/Controllers/KetuaDepartemen/KetuaDepartemenDashboardController.php
 
 namespace App\Http\Controllers\KetuaDepartemen;
 
@@ -87,7 +88,7 @@ class KetuaDepartemenDashboardController extends Controller
         if ($request->filled('search')) {
             $searchTerm = $request->search;
             $query->where(function ($q) use ($searchTerm) {
-                $q->where('nama_lengkap', 'like', '%' . $searchTerm . '%')
+                $q->where('nama_lengkap', 'regexp', "/.*$searchTerm.*/i")
                     ->orWhere('nik', 'like', '%' . $searchTerm . '%');
             });
         }
@@ -107,26 +108,35 @@ class KetuaDepartemenDashboardController extends Controller
 
         $bulanIni = $request->input('bulan', date('m'));
         $tahunIni = $request->input('tahun', date('Y'));
-        
-        $petugasNiks = $this->getScopedKaryawanQuery()->pluck('nik')->toArray();
+        $searchNik = $request->input('nik');
+        $searchNama = $request->input('nama');
 
-        $presensiData = collect();
-        if (!empty($petugasNiks)) {
-            $query = Presensi::query()->with('karyawan')->whereIn('nik', $petugasNiks);
-            
-            $startDate = Carbon::createFromDate($tahunIni, $bulanIni, 1)->startOfMonth();
-            $endDate = Carbon::createFromDate($tahunIni, $bulanIni, 1)->endOfMonth();
-            $query->whereBetween('tgl_presensi', [new UTCDateTime($startDate->timestamp * 1000), new UTCDateTime($endDate->timestamp * 1000)]);
-            
-            if ($request->filled('nik')) $query->where('nik', 'like', '%' . $request->nik . '%');
-            if ($request->filled('nama')) $query->whereHas('karyawan', fn($q) => $q->where('nama_lengkap', 'like', '%' . $request->nama . '%'));
-
-            $presensiData = $query->orderBy('tgl_presensi', 'desc')->paginate(15);
+        $karyawanQuery = $this->getScopedKaryawanQuery();
+        if ($searchNik) {
+            $karyawanQuery->where('nik', 'like', '%' . $searchNik . '%');
         }
+        if ($searchNama) {
+            $karyawanQuery->where('nama_lengkap', 'regexp', "/.*$searchNama.*/i");
+        }
+        $petugasNiksToSearch = $karyawanQuery->pluck('nik')->toArray();
+
+        $query = Presensi::query()->with('karyawan');
+        
+        if (empty($petugasNiksToSearch) && ($searchNik || $searchNama)) {
+            $query->whereRaw(fn($q) => $q->where('_id', '=', '0'));
+        } else {
+            $query->whereIn('nik', $petugasNiksToSearch);
+        }
+            
+        $startDate = Carbon::createFromDate($tahunIni, $bulanIni, 1)->startOfMonth();
+        $endDate = Carbon::createFromDate($tahunIni, $bulanIni, 1)->endOfMonth();
+        $query->whereBetween('tgl_presensi', [new UTCDateTime($startDate->timestamp * 1000), new UTCDateTime($endDate->timestamp * 1000)]);
+
+        $presensiData = $query->orderBy('tgl_presensi', 'desc')->paginate(15);
         
         $namaBulan = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
-        return view('ketua-departemen.presensi.rekapitulasi', compact('presensiData', 'bulanIni', 'tahunIni', 'namaBulan', 'fakultas', 'departemen'));
+        return view('ketua-departemen.presensi.rekapitulasi', compact('presensiData', 'bulanIni', 'tahunIni', 'namaBulan', 'fakultas', 'departemen', 'searchNik', 'searchNama'));
     }
 
     /**
@@ -182,13 +192,21 @@ class KetuaDepartemenDashboardController extends Controller
     public function laporanKaryawan(Request $request)
     {
         $ketua = Auth::guard('karyawan')->user();
-        $petugasNiks = $this->getScopedKaryawanQuery()->pluck('nik')->toArray();
-        
+
+        $karyawanQuery = $this->getScopedKaryawanQuery();
+        if ($request->filled('nik_karyawan')) {
+            $karyawanQuery->where('nik', 'like', '%' . $request->nik_karyawan . '%');
+        }
+        if ($request->filled('nama_karyawan')) {
+            $karyawanQuery->where('nama_lengkap', 'regexp', "/.*{$request->nama_karyawan}.*/i");
+        }
+        $petugasNiksToSearch = $karyawanQuery->pluck('nik')->toArray();
+
         $query = Laporan::with('karyawan');
-        if (!empty($petugasNiks)) {
-            $query->whereIn('nik', $petugasNiks);
+        if (empty($petugasNiksToSearch) && ($request->filled('nik_karyawan') || $request->filled('nama_karyawan'))) {
+            $query->whereRaw(fn($q) => $q->where('_id', '=', '0'));
         } else {
-            $query->whereRaw(fn($q) => $q->where('nik', '=', '-1'));
+            $query->whereIn('nik', $petugasNiksToSearch);
         }
 
         if ($request->filled('tanggal_mulai') && $request->filled('tanggal_akhir')) {
@@ -197,7 +215,6 @@ class KetuaDepartemenDashboardController extends Controller
             $query->whereBetween('created_at', [new UTCDateTime($tanggalMulai->timestamp * 1000), new UTCDateTime($tanggalAkhir->timestamp * 1000)]);
         }
         
-        if ($request->filled('nik_karyawan')) $query->where('nik', $request->nik_karyawan);
         if ($request->filled('jenis_laporan')) $query->where('jenis_laporan', $request->jenis_laporan);
         
         if ($request->filled('status_laporan')) {
@@ -254,16 +271,23 @@ class KetuaDepartemenDashboardController extends Controller
     public function patroliKaryawan(Request $request)
     {
         $ketua = Auth::guard('karyawan')->user();
-        $petugasNiks = $this->getScopedKaryawanQuery()->pluck('nik')->toArray();
         
+        $karyawanQuery = $this->getScopedKaryawanQuery();
+        if ($request->filled('nik_karyawan')) {
+            $karyawanQuery->where('nik', 'like', '%' . $request->nik_karyawan . '%');
+        }
+        if ($request->filled('nama_karyawan')) {
+            $karyawanQuery->where('nama_lengkap', 'regexp', "/.*{$request->nama_karyawan}.*/i");
+        }
+        $petugasNiksToSearch = $karyawanQuery->pluck('nik')->toArray();
+
         $query = Patrol::with('karyawan')->where('status', 'selesai');
-        if (!empty($petugasNiks)) {
-            $query->whereIn('karyawan_nik', $petugasNiks);
+        if (empty($petugasNiksToSearch) && ($request->filled('nik_karyawan') || $request->filled('nama_karyawan'))) {
+            $query->whereRaw(fn($q) => $q->where('_id', '=', '0'));
         } else {
-            $query->whereRaw(fn($q) => $q->where('karyawan_nik', '=', '-1'));
+            $query->whereIn('karyawan_nik', $petugasNiksToSearch);
         }
 
-        if ($request->filled('nik_karyawan')) $query->where('karyawan_nik', $request->nik_karyawan);
         if ($request->filled('tanggal_mulai')) $query->where('start_time', '>=', new UTCDateTime(Carbon::parse($request->tanggal_mulai)->startOfDay()->timestamp * 1000));
         if ($request->filled('tanggal_akhir')) $query->where('start_time', '<=', new UTCDateTime(Carbon::parse($request->tanggal_akhir)->endOfDay()->timestamp * 1000));
         
@@ -288,8 +312,19 @@ class KetuaDepartemenDashboardController extends Controller
         }
 
         $pathForMap = collect($patrol->path)->map(fn ($point) => (is_array($point) && count($point) >= 2) ? [$point[1], $point[0]] : null)->filter()->toArray();
+        
+        // --- PERBAIKAN: Mengambil data lokasi dan radius dari relasi karyawan ---
+        $officeLocation = $patrol->karyawan->office_location ?? null;
+        $officeRadius = $patrol->karyawan->office_radius ?? null;
 
-        return view('ketua-departemen.patroli.show', ['patrol' => $patrol, 'pathForMap' => $pathForMap, 'fakultas' => $ketua->unit, 'departemen' => $ketua->departemen]);
+        return view('ketua-departemen.patroli.show', [
+            'patrol' => $patrol, 
+            'pathForMap' => $pathForMap, 
+            'fakultas' => $ketua->unit, 
+            'departemen' => $ketua->departemen,
+            'officeLocation' => $officeLocation,
+            'officeRadius' => $officeRadius
+        ]);
     }
     
     public function monitoring()
@@ -302,7 +337,6 @@ class KetuaDepartemenDashboardController extends Controller
         $ketua = Auth::guard('karyawan')->user();
         $petugasNiks = $this->getScopedKaryawanQuery()->pluck('nik')->toArray();
 
-        // PERBAIKAN: Mengambil status 'aktif' dan 'jeda'
         $activePatrols = Patrol::with('karyawan:nik,nama_lengkap,foto')
                                ->whereIn('status', ['aktif', 'jeda'])
                                ->whereIn('karyawan_nik', $petugasNiks)
@@ -323,7 +357,7 @@ class KetuaDepartemenDashboardController extends Controller
                     'foto_url' => $patrol->karyawan->foto ? asset('storage/' . $patrol->karyawan->foto) : asset('assets/img/sample/avatar/avatar1.jpg'),
                     'latitude' => $lastPoint->latitude,
                     'longitude' => $lastPoint->longitude,
-                    'status' => $patrol->status, // Mengirim status ke frontend
+                    'status' => $patrol->status,
                     'last_update' => Carbon::parse($lastPoint->timestamp)->diffForHumans(),
                     'start_time' => Carbon::parse($patrol->start_time)->format('H:i:s'),
                 ];

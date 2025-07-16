@@ -1,3 +1,4 @@
+{{-- File: resources/views/admin/patroli/monitoring.blade.php --}}
 @extends('admin.layouts.app')
 
 @section('title', 'Monitoring Patroli Real-Time')
@@ -119,7 +120,10 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const map = L.map('map-monitoring').setView([-2.548926, 118.0148634], 5);
+    // --- PERBAIKAN: Mengatur level zoom ke 15 ---
+    const map = L.map('map-monitoring').setView([-7.05165831256373, 110.44084456583003], 15); // Set view ke Undip dengan zoom 15
+    // --- AKHIR PERBAIKAN ---
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
@@ -127,6 +131,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let officerMarkers = {};
     let officerPolylines = {};
     let focusedOfficerNik = null;
+    let isFirstLoad = true;
     const POLLING_INTERVAL = 7000;
 
     const mapTitle = document.getElementById('map-title');
@@ -137,7 +142,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return `
             <div class="text-center">
                 <strong>${officer.nama_lengkap}</strong><br>
-                <small>NIK: ${officer.nik}</small><br>
+                <small>Username: ${officer.nik}</small><br>
                 <small>Mulai: ${officer.start_time}</small><br>
                 <small>Update: ${officer.last_update}</small><br>
                 <span class="badge bg-${officer.status === 'jeda' ? 'warning text-dark' : 'success'}">${officer.status}</span>
@@ -213,7 +218,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <img src="${officer.foto_url}" alt="${officer.nama_lengkap}" class="officer-avatar me-3">
                 <div>
                     <div class="fw-bold">${officer.nama_lengkap}</div>
-                    <small class="text-muted">NIK: ${officer.nik}</small>
+                    <small class="text-muted">Username: ${officer.nik}</small>
                     ${officer.status === 'jeda' ? '<div class="mt-1"><span class="badge bg-warning text-dark">Jeda</span></div>' : ''}
                 </div>
             `;
@@ -244,14 +249,13 @@ document.addEventListener('DOMContentLoaded', function () {
             const group = new L.featureGroup(Object.values(officerMarkers));
             map.fitBounds(group.getBounds().pad(0.5));
         } else {
-            map.setView([-2.548926, 118.0148634], 5);
+            map.setView([-7.05165831256373, 110.44084456583003], 15);
         }
     });
 
     async function fetchAndUpdatePatrolData() {
         try {
             let liveDataUrl = '';
-            // PERBAIKAN: Menggunakan Blade directive untuk menentukan URL yang benar saat render
             @if(request()->is('komandan/*'))
                 liveDataUrl = '{{ route("komandan.patroli.live_data") }}';
             @elseif(request()->is('ketua-departemen/*'))
@@ -266,12 +270,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
             
-            const response = await fetch(liveDataUrl);
+            const urlWithCacheBuster = `${liveDataUrl}?_=${new Date().getTime()}`;
+            const response = await fetch(urlWithCacheBuster);
+
             if (!response.ok) throw new Error(`Gagal mengambil data patroli: ${response.statusText}`);
             
             const activeOfficers = await response.json();
-            console.log("Data diterima:", activeOfficers);
-
+            
             const activeNiks = activeOfficers.map(o => o.nik);
             for (const nik in officerMarkers) {
                 if (!activeNiks.includes(nik)) {
@@ -290,16 +295,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
             updateOfficerList(activeOfficers);
             
-            if (!focusedOfficerNik && activeOfficers.length > 0) {
+            if (isFirstLoad && activeOfficers.length > 0) {
                 const group = new L.featureGroup(Object.values(officerMarkers));
                 map.fitBounds(group.getBounds().pad(0.5));
+                isFirstLoad = false;
             }
 
         } catch (error) {
             console.error('Error fetching patrol data:', error);
-            loadingOfficersEl.style.display = 'none';
             const listContainer = document.getElementById('active-officers-list');
-            listContainer.innerHTML = `<p class="text-center text-danger p-3 small">Gagal memuat data. Coba refresh halaman.</p>`;
+            if (listContainer.children.length === 0 || listContainer.querySelector('#loading-officers')) {
+                 listContainer.innerHTML = `<p class="text-center text-danger p-3 small">Gagal memuat data. Mencoba lagi...</p>`;
+            }
         }
     }
 
