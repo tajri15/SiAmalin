@@ -341,21 +341,74 @@ class KomandanDashboardController extends Controller
      */
     public function showPatroliKaryawan($patrolId)
     {
-        $komandan = Auth::guard('karyawan')->user();
-        $fakultasKomandan = $komandan->unit;
-        $patrol = Patrol::with('karyawan')->find($patrolId);
-
-        if (!$patrol || !$patrol->karyawan || $patrol->karyawan->unit !== $fakultasKomandan) {
-            return redirect()->route('komandan.patroli.index')->with('error', 'Anda tidak berhak mengakses detail patroli ini.');
+        try {
+            $komandan = Auth::guard('karyawan')->user();
+            $fakultasKomandan = $komandan->unit;
+            
+            // Debug log
+            Log::info('Komandan accessing patrol detail', [
+                'patrol_id' => $patrolId,
+                'komandan_nik' => $komandan->nik,
+                'fakultas' => $fakultasKomandan
+            ]);
+            
+            // Cari patrol dengan eager loading
+            $patrol = Patrol::with('karyawan')->find($patrolId);
+            
+            if (!$patrol) {
+                Log::warning('Patrol not found', ['patrol_id' => $patrolId]);
+                return redirect()->route('komandan.patroli.index')->with('error', 'Data patroli tidak ditemukan.');
+            }
+            
+            if (!$patrol->karyawan) {
+                Log::warning('Patrol karyawan not found', ['patrol_id' => $patrolId]);
+                return redirect()->route('komandan.patroli.index')->with('error', 'Data karyawan patroli tidak ditemukan.');
+            }
+            
+            if ($patrol->karyawan->unit !== $fakultasKomandan) {
+                Log::warning('Komandan accessing patrol outside faculty', [
+                    'patrol_id' => $patrolId,
+                    'patrol_faculty' => $patrol->karyawan->unit,
+                    'komandan_faculty' => $fakultasKomandan
+                ]);
+                return redirect()->route('komandan.patroli.index')->with('error', 'Anda tidak berhak mengakses detail patroli ini.');
+            }
+            
+            // Proses path untuk map
+            $pathForMap = collect($patrol->path)->map(function($point) {
+                if (is_array($point) && count($point) >= 2 && is_numeric($point[0]) && is_numeric($point[1])) {
+                    return [$point[1], $point[0]]; // [lat, lng]
+                }
+                return null;
+            })->filter()->toArray();
+            
+            // Ambil data lokasi dan radius dari relasi karyawan
+            $officeLocation = $patrol->karyawan->office_location ?? null;
+            $officeRadius = $patrol->karyawan->office_radius ?? null;
+            
+            Log::info('Patrol detail loaded successfully', [
+                'patrol_id' => $patrolId,
+                'has_path' => !empty($pathForMap),
+                'has_office_location' => !is_null($officeLocation)
+            ]);
+            
+            return view('komandan.patroli.show', compact(
+                'patrol', 
+                'pathForMap', 
+                'fakultasKomandan', 
+                'officeLocation', 
+                'officeRadius'
+            ));
+            
+        } catch (\Exception $e) {
+            Log::error('Error in showPatroliKaryawan', [
+                'patrol_id' => $patrolId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()->route('komandan.patroli.index')->with('error', 'Terjadi kesalahan saat memuat detail patroli.');
         }
-        
-        $pathForMap = collect($patrol->path)->map(fn($point) => (is_array($point) && count($point) >= 2 && is_numeric($point[0]) && is_numeric($point[1])) ? [$point[1], $point[0]] : null)->filter()->toArray(); 
-
-        // --- PERBAIKAN: Mengambil data lokasi dan radius dari relasi karyawan ---
-        $officeLocation = $patrol->karyawan->office_location ?? null;
-        $officeRadius = $patrol->karyawan->office_radius ?? null;
-
-        return view('komandan.patroli.show', compact('patrol', 'pathForMap', 'fakultasKomandan', 'officeLocation', 'officeRadius'));
     }
 
     public function monitoring()

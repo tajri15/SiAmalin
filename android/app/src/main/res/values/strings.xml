@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SiAmalin</string>
+    <string name="title_activity_main">SiAmalin</string>
+    <string name="package_name">id.my.undip.siamalin</string>
+    <string name="custom_url_scheme">id.my.undip.siamalin</string>
+</resources>

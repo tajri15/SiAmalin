@@ -210,7 +210,7 @@ Route::middleware(['auth:karyawan'])->group(function () {
         Route::prefix('laporan')->name('laporan.')->group(function () {
             Route::get('/', [KetuaDepartemenDashboardController::class, 'laporanKaryawan'])->name('index');
             Route::get('/show/{id}', [KetuaDepartemenDashboardController::class, 'showLaporanKaryawan'])->name('show');
-            Route::post('/update-status/{id}', [KetuaDepartemenDashboardController::class, 'updateStatusLaporan'])->name('update_status');
+            //Route::post('/update-status/{id}', [KetuaDepartemenDashboardController::class, 'updateStatusLaporan'])->name('update_status');
         });
         
         Route::prefix('patroli')->name('patroli.')->group(function () {

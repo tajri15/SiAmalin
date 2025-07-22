@@ -95,15 +95,15 @@
                                 </span>
                             </td>
                         </tr>
-                        {{-- NEW: Face verification status --}}
+                        {{-- Face verification status --}}
                         <tr>
                             <th>Verifikasi Wajah</th>
                             <td>
-                                @if($patrol->face_verified ?? false)
+                                @if(($patrol->face_verified ?? false))
                                     <span class="badge bg-success">
                                         <i class="bi bi-check-circle me-1"></i>Terverifikasi
                                     </span>
-                                    @if($patrol->face_verification_time)
+                                    @if(isset($patrol->face_verification_time))
                                         <br><small class="text-muted">
                                             {{ \Carbon\Carbon::parse($patrol->face_verification_time)->isoFormat('D MMM YYYY HH:mm') }}
                                         </small>
@@ -117,8 +117,8 @@
                         </tr>
                     </table>
 
-                    {{-- NEW: Face verification section --}}
-                    @if($patrol->face_verified && $patrol->face_verification_image)
+                    {{-- Face verification section --}}
+                    @if(($patrol->face_verified ?? false) && isset($patrol->face_verification_image))
                     <div class="face-verification-section">
                         <h6 class="mb-3">
                             <i class="bi bi-person-check me-2"></i>Foto Verifikasi Wajah
@@ -128,7 +128,7 @@
                                  alt="Foto Verifikasi Wajah" 
                                  class="face-verification-image"
                                  onclick="showImageModal(this.src)">
-                            @if($patrol->face_verification_time)
+                            @if(isset($patrol->face_verification_time))
                             <p class="text-muted mt-2 mb-0">
                                 <small>Diverifikasi pada: {{ \Carbon\Carbon::parse($patrol->face_verification_time)->isoFormat('dddd, D MMMM YYYY HH:mm:ss') }}</small>
                             </p>
@@ -179,7 +179,14 @@
         const mapContainer = document.getElementById('mapKomandanDetail');
         if (!mapContainer) return;
 
-        // Tentukan titik tengah peta. Prioritaskan lokasi kantor.
+        // Debug log
+        console.log('Map initialization:', {
+            pathData: pathData,
+            officeLocation: officeLocation,
+            officeRadius: officeRadius
+        });
+
+        // Tentukan titik tengah peta
         let centerLat, centerLng;
         if (officeLat && officeLng) {
             centerLat = officeLat;
@@ -205,11 +212,29 @@
             bounds.extend(patrolPolylineDetail.getBounds());
 
             // Marker Mulai
-            L.marker(pathData[0], {icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]})}).addTo(mapKomandanDetail).bindPopup('Mulai Patroli');
+            L.marker(pathData[0], {
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                })
+            }).addTo(mapKomandanDetail).bindPopup('Mulai Patroli');
             
-            // Marker Selesai (jika ada lebih dari 1 titik)
+            // Marker Selesai
             if (pathData.length > 1) {
-                L.marker(pathData[pathData.length - 1], {icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]})}).addTo(mapKomandanDetail).bindPopup('Selesai Patroli');
+                L.marker(pathData[pathData.length - 1], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).addTo(mapKomandanDetail).bindPopup('Selesai Patroli');
             }
         }
 
@@ -224,11 +249,10 @@
             bounds.extend(officeCircle.getBounds());
         }
 
-        // Sesuaikan zoom peta jika ada objek yang digambar
+        // Sesuaikan zoom peta
         if (bounds.isValid()) {
-            mapKomandanDetail.fitBounds(bounds.pad(0.2)); // Beri sedikit padding
+            mapKomandanDetail.fitBounds(bounds.pad(0.2));
         } else if (!pathData || pathData.length === 0) {
-            // Jika tidak ada data sama sekali
             mapContainer.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100"><p class="text-muted p-5">Tidak ada data jejak atau lokasi kerja untuk ditampilkan.</p></div>';
         }
     });
@@ -239,3 +263,5 @@
         const imageModal = new bootstrap.Modal(document.getElementById('imageModal'));
         imageModal.show();
     }
+</script>
+@endpush

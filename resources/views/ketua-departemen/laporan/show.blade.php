@@ -1,3 +1,4 @@
+{{-- resources\views\ketua-departemen\laporan\show.blade.php --}}
 @extends('admin.layouts.app')
 
 @section('title', 'Detail Laporan Petugas - ' . $departemen)
@@ -90,7 +91,7 @@
         <div class="col-lg-4">
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Status & Tindakan</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">Status Laporan</h6>
                 </div>
                 <div class="card-body">
                     <p><strong>Status Saat Ini:</strong>
@@ -113,26 +114,6 @@
                         <small class="text-muted" style="white-space: pre-wrap;">{{ $laporan->catatan_admin }}</small>
                     </p>
                     @endif
-
-                    <hr>
-                    <form action="{{ route('ketua-departemen.laporan.update_status', $laporan->_id) }}" method="POST">
-                        @csrf
-                        <div class="mb-3">
-                            <label for="status_admin" class="form-label">Ubah Status:</label>
-                            <select name="status_admin" id="status_admin" class="form-select @error('status_admin') is-invalid @enderror" required>
-                                <option value="">-- Pilih Status --</option>
-                                <option value="Diterima" {{ old('status_admin', $laporan->status_admin) == 'Diterima' ? 'selected' : '' }}>Diterima</option>
-                                <option value="Ditolak" {{ old('status_admin', $laporan->status_admin) == 'Ditolak' ? 'selected' : '' }}>Ditolak</option>
-                            </select>
-                            @error('status_admin') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-                        <div class="mb-3">
-                            <label for="catatan_admin" class="form-label">Catatan (Opsional):</label>
-                            <textarea name="catatan_admin" id="catatan_admin" rows="3" class="form-control @error('catatan_admin') is-invalid @enderror">{{ old('catatan_admin', $laporan->catatan_admin) }}</textarea>
-                            @error('catatan_admin') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-block">Update Status</button>
-                    </form>
                 </div>
             </div>
         </div>

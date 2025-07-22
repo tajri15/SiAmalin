@@ -245,6 +245,7 @@ class KetuaDepartemenDashboardController extends Controller
         return view('ketua-departemen.laporan.show', ['laporan' => $laporan, 'fakultas' => $ketua->unit, 'departemen' => $ketua->departemen]);
     }
     
+    /*
     public function updateStatusLaporan(Request $request, $id)
     {
         $ketua = Auth::guard('karyawan')->user();
@@ -267,6 +268,7 @@ class KetuaDepartemenDashboardController extends Controller
         
         return redirect()->route('ketua-departemen.laporan.show', $id)->with('success', 'Status laporan berhasil diperbarui.');
     }
+    */
 
     public function patroliKaryawan(Request $request)
     {
